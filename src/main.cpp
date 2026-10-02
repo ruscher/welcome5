@@ -4,6 +4,7 @@
 #include "services/InstallService.h"
 #include "services/PackageService.h"
 #include "services/SingleInstance.h"
+#include "services/StartupPreference.h"
 #include "services/SystemService.h"
 
 #include <QGuiApplication>
@@ -24,7 +25,7 @@ int main(int argc, char *argv[])
     app.setApplicationDisplayName(QStringLiteral("Mainuan — Bem-vindo"));
     app.setOrganizationName(QStringLiteral("Mainuan"));
     app.setOrganizationDomain(QStringLiteral("mainuan.org"));
-    app.setApplicationVersion(QStringLiteral("2.0.0"));
+    app.setApplicationVersion(QStringLiteral(MAINUAN_VERSION));
     app.setDesktopFileName(QStringLiteral("org.mainuan.Welcome"));
 
     SingleInstance singleInstance;
@@ -94,6 +95,7 @@ int main(int argc, char *argv[])
     officeModel.setInstallService(&installService);
     browserModel.setInstallService(&installService);
 
+    StartupPreference startupPreference;
     VideoModel videoModel;
     LayoutModel layoutModel;
 
@@ -101,6 +103,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("systemService"), &systemService);
     engine.rootContext()->setContextProperty(QStringLiteral("packageService"), &packageService);
     engine.rootContext()->setContextProperty(QStringLiteral("installService"), &installService);
+    engine.rootContext()->setContextProperty(QStringLiteral("startupPreference"), &startupPreference);
     engine.rootContext()->setContextProperty(QStringLiteral("officeModel"), &officeModel);
     engine.rootContext()->setContextProperty(QStringLiteral("browserModel"), &browserModel);
     engine.rootContext()->setContextProperty(QStringLiteral("videoModel"), &videoModel);
@@ -146,8 +149,13 @@ int main(int argc, char *argv[])
         });
     }
 
-    QObject::connect(&singleInstance, &SingleInstance::activationRequested, &app, [rootObject]() {
+    QObject::connect(&singleInstance, &SingleInstance::activationRequested, &app,
+                     [rootObject](const QString &activationToken) {
         if (auto *window = qobject_cast<QQuickWindow *>(rootObject)) {
+            if (!activationToken.isEmpty()) {
+                // Qt's Wayland plugin consumes this variable in requestActivate().
+                qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
+            }
             window->showNormal();
             if (QGuiApplication::platformName() != QStringLiteral("offscreen")
                 && QGuiApplication::platformName() != QStringLiteral("minimal")) {

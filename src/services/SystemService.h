@@ -17,6 +17,7 @@ class SystemService final : public QObject
     Q_PROPERTY(QString visualStyle READ visualStyle NOTIFY visualStyleChanged)
     Q_PROPERTY(bool visualStyleAvailable READ visualStyleAvailable NOTIFY visualStyleChanged)
     Q_PROPERTY(QString sessionType READ sessionType CONSTANT)
+    Q_PROPERTY(QString logoSource READ logoSource CONSTANT)
     Q_PROPERTY(QString plasmaVersion READ plasmaVersion NOTIFY plasmaVersionChanged)
     Q_PROPERTY(QString pixKey READ pixKey NOTIFY pixKeyChanged)
     Q_PROPERTY(QString firewallStatus READ firewallStatus NOTIFY diagnosticsChanged)
@@ -33,6 +34,8 @@ public:
     QString visualStyle() const;
     bool visualStyleAvailable() const;
     QString sessionType() const;
+    // file:// URL of the official Mainuan logo, empty when it is not installed.
+    QString logoSource() const;
     QString plasmaVersion() const;
     QString pixKey() const;
     QString firewallStatus() const;
@@ -95,6 +98,7 @@ private:
     QString m_driversStatus;
     QString m_lastMessage;
     QString m_sessionType;
+    QString m_logoSource;
     bool m_darkTheme = false;
     bool m_visualStyleAvailable = false;
     bool m_driversAvailable = false;

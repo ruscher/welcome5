@@ -49,6 +49,11 @@ Kirigami.ApplicationWindow {
         function onLaunchFailed(message) { root.showPassiveNotification(message) }
     }
 
+    Connections {
+        target: startupPreference
+        function onFailed(message) { root.showPassiveNotification(message) }
+    }
+
     InstallDialog {
         id: installDialog
         installer: installService
@@ -89,10 +94,36 @@ Kirigami.ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 12
                 spacing: 10
-                RowLayout {
+                // Official logo above the menu; a themed icon stands in if the file is missing.
+                Item {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.sidebarCollapsed ? 52 : 92
+                    Layout.topMargin: 6
                     Layout.bottomMargin: 10
-                    Controls.Label { Layout.fillWidth: true; text: root.sidebarCollapsed ? "M" : "MAINUAN"; color: root.accent; font.pixelSize: root.sidebarCollapsed ? 22 : 16; font.weight: Font.Black; horizontalAlignment: root.sidebarCollapsed ? Text.AlignHCenter : Text.AlignLeft }
+                    Image {
+                        id: logo
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - (root.sidebarCollapsed ? 4 : 32), root.sidebarCollapsed ? 48 : 168)
+                        height: parent.height
+                        source: systemService.logoSource
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.height: 2 * parent.height
+                        asynchronous: true
+                        smooth: true
+                        mipmap: true
+                        visible: status === Image.Ready
+                        Accessible.role: Accessible.Graphic
+                        Accessible.name: "Mainuan"
+                    }
+                    Kirigami.Icon {
+                        anchors.centerIn: parent
+                        width: root.sidebarCollapsed ? 32 : 48
+                        height: width
+                        visible: logo.status !== Image.Ready
+                        source: "start-here-kde-plasma"
+                        fallback: "start-here"
+                        Accessible.name: "Mainuan"
+                    }
                 }
                 ListView {
                     id: navigation
@@ -140,7 +171,17 @@ Kirigami.ApplicationWindow {
                     anchors.rightMargin: 24
                     Controls.Label { text: navigationModel.get(root.currentPage).label; color: root.textColor; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Item { Layout.fillWidth: true }
-                    Controls.Label { text: systemService.sessionType === "wayland" ? "Wayland" : systemService.sessionType; color: root.mutedColor; font.pixelSize: 11 }
+                    Controls.CheckBox {
+                        id: startupCheck
+                        text: "Mostrar esta tela ao iniciar o sistema"
+                        checked: startupPreference.showAtStartup
+                        onToggled: {
+                            startupPreference.showAtStartup = checked;
+                            // Toggling replaces the binding; keep following the real preference.
+                            checked = Qt.binding(() => startupPreference.showAtStartup);
+                        }
+                        Accessible.description: "Abre esta tela automaticamente quando você entra na sua sessão"
+                    }
                 }
             }
             StackLayout {

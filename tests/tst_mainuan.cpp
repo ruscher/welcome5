@@ -3,6 +3,7 @@
 #include "services/InstallProgressParser.h"
 #include "services/InstallService.h"
 #include "services/PackageService.h"
+#include "services/StartupPreference.h"
 #include "services/SystemService.h"
 
 #include <QtTest>
@@ -136,6 +137,10 @@ private slots:
     void treatsDeniedFlatpakAuthorizationAsCancelled();
     void disablesAptProfilesOnNonDebianSystems();
     void rejectsUnknownProfiles();
+
+    void startupPreferenceDefaultsToShown();
+    void startupPreferenceIsStoredPerUser();
+    void startupPreferenceReadsPlasmaOverrides();
 };
 
 void MainuanTest::cleanup()
@@ -586,6 +591,69 @@ void MainuanTest::rejectsUnknownProfiles()
     QVERIFY(!installer.registerApplication(QStringLiteral("com.brave.Browser"), QStringLiteral("Brave"), {}, {}));
     QVERIFY(!installer.busy());
     QVERIFY(!installer.launch(QStringLiteral("unknown")));
+}
+
+void MainuanTest::startupPreferenceDefaultsToShown()
+{
+    QTemporaryDir home;
+    StartupPreference preference(nullptr, home.path());
+    QVERIFY(preference.showAtStartup());
+    QCOMPARE(QFileInfo(preference.overridePath()).fileName(), QStringLiteral("org.mainuan.Welcome.desktop"));
+    QVERIFY(!QFileInfo::exists(preference.overridePath()));
+}
+
+void MainuanTest::startupPreferenceIsStoredPerUser()
+{
+    QTemporaryDir firstUser;
+    QTemporaryDir secondUser;
+    StartupPreference preference(nullptr, firstUser.path());
+    QSignalSpy changed(&preference, &StartupPreference::showAtStartupChanged);
+
+    preference.setShowAtStartup(false);
+    QVERIFY(!preference.showAtStartup());
+    QCOMPARE(changed.count(), 1);
+    QFile file(preference.overridePath());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray contents = file.readAll();
+    QVERIFY(contents.contains("[Desktop Entry]"));
+    QVERIFY(contents.contains("Hidden=true"));
+
+    // The choice survives a restart and does not affect another user.
+    QVERIFY(!StartupPreference(nullptr, firstUser.path()).showAtStartup());
+    QVERIFY(StartupPreference(nullptr, secondUser.path()).showAtStartup());
+
+    preference.setShowAtStartup(true);
+    QVERIFY(preference.showAtStartup());
+    QVERIFY(!QFileInfo::exists(preference.overridePath()));
+    QVERIFY(StartupPreference(nullptr, firstUser.path()).showAtStartup());
+    QCOMPARE(changed.count(), 2);
+
+    preference.setShowAtStartup(true); // no-op
+    QCOMPARE(changed.count(), 2);
+}
+
+void MainuanTest::startupPreferenceReadsPlasmaOverrides()
+{
+    QTemporaryDir home;
+    StartupPreference preference(nullptr, home.path());
+    QDir().mkpath(QFileInfo(preference.overridePath()).absolutePath());
+    const auto write = [&preference](const QByteArray &contents) {
+        QFile file(preference.overridePath());
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(contents);
+    };
+
+    write("[Desktop Entry]\nExec=mainuan-welcome\nHidden = TRUE\n");
+    preference.reload();
+    QVERIFY(!preference.showAtStartup());
+
+    write("[Desktop Entry]\nExec=mainuan-welcome\nHidden=false\n[Desktop Action x]\nHidden=true\n");
+    preference.reload();
+    QVERIFY(preference.showAtStartup());
+
+    write("[Desktop Entry]\nHiddenSomething=true\n");
+    preference.reload();
+    QVERIFY(preference.showAtStartup());
 }
 
 QTEST_GUILESS_MAIN(MainuanTest)

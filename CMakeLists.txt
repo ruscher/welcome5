@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(mainuan-welcome VERSION 2.0.0 LANGUAGES CXX)
+project(mainuan-welcome VERSION 2.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -41,6 +41,8 @@ add_library(mainuan-core STATIC
     src/services/InstallProgressParser.h
     src/services/SingleInstance.cpp
     src/services/SingleInstance.h
+    src/services/StartupPreference.cpp
+    src/services/StartupPreference.h
     src/models/ApplicationModel.cpp
     src/models/ApplicationModel.h
     src/models/VideoModel.cpp
@@ -131,6 +133,7 @@ if (TARGET KF6::Kirigami)
     target_link_libraries(mainuan-welcome PRIVATE KF6::Kirigami)
 endif()
 
+target_compile_definitions(mainuan-welcome PRIVATE MAINUAN_VERSION="${PROJECT_VERSION}")
 if (MAINUAN_DEVELOPER_MODE)
     target_compile_definitions(mainuan-welcome PRIVATE MAINUAN_DEVELOPER_MODE)
 endif()
@@ -149,14 +152,23 @@ install(TARGETS mainuan-welcome
 )
 
 install(FILES
-    rootfs/usr/share/applications/mainuan-welcome.desktop
+    rootfs/usr/share/applications/org.mainuan.Welcome.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+
+# System-wide login entry; each user can hide it from the Welcome itself
+# (Hidden=true in $XDG_CONFIG_HOME/autostart). With prefix /usr this is /etc.
+install(FILES
+    rootfs/etc/xdg/autostart/org.mainuan.Welcome.desktop
+    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart
 )
 
 install(FILES
     rootfs/usr/share/metainfo/org.mainuan.Welcome.metainfo.xml
     DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
 )
+
+install(FILES doc/mainuan-welcome.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
 install(PROGRAMS
     rootfs/usr/libexec/mainuan-welcome/mainuan-welcome-helper

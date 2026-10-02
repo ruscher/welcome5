@@ -12,7 +12,9 @@ public:
     bool tryAcquire();
 
 signals:
-    void activationRequested();
+    // `activationToken` is the XDG activation token the launcher gave the
+    // second instance; Wayland compositors require it to raise the window.
+    void activationRequested(const QString &activationToken);
 
 private:
     QString serverName() const;

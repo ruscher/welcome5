@@ -1,0 +1,7 @@
+mainuan-welcome (2.1.0) unstable; urgency=medium
+
+  * Native Qt 6/Kirigami Welcome with the universal installer.
+  * Official Mainuan logo, per-user "show at login" preference and
+    system-wide XDG autostart entry.
+
+ -- ruscher <rruscher@gmail.com>  Fri, 02 Oct 2026 11:48:44 -0300
