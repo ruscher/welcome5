@@ -94,7 +94,7 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Revisão: restauração apagava o arquivo antes de copiar (disco cheio = Plasma sem painéis) | `QSaveFile` (troca atômica) |
 | Revisão: `systemctl` sem tratamento de falha ao iniciar nem tempo-limite podia deixar o Welcome “ocupado” | auxiliar único com `errorOccurred` e tempo-limite de 60 s |
 | Revisão: disponibilidade do Plasma lida só na abertura | relida sempre que a Aparência aparece |
-| Revisão: o teste de fumaça usava o barramento D-Bus da sessão real | `dbus-run-session` (ou nenhum barramento) |
+| Revisão: o teste de fumaça usava o barramento D-Bus da sessão real | roda sem barramento nem display (um barramento privado com `dbus-run-session` deixava portais ativados rodando após o build) |
 
 ## Testes executados
 
