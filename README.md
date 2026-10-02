@@ -47,16 +47,18 @@ Para instalar em um staging root:
 cmake --install build --prefix "$PWD/stage"
 ```
 
-O pacote instala o binário em `bin/`, o helper em `libexec/mainuan-welcome/`, a ação polkit em `share/polkit-1/actions/` (com o caminho do helper gerado pelo CMake), o desktop file em `share/applications/` e os metadados AppStream em `share/metainfo/`. Os assets são embutidos no recurso Qt para a interface funcionar offline.
+O pacote instala o binário em `bin/`, o helper em `libexec/mainuan-welcome/`, a ação polkit em `share/polkit-1/actions/` (com o caminho do helper gerado pelo CMake), o desktop file em `share/applications/`, os metadados AppStream em `share/metainfo/`, a entrada de login em `etc/xdg/autostart/` e a configuração em `etc/mainuan/welcome.conf` (com o prefixo `/usr`, esses dois vão para `/etc`). Os assets são embutidos no recurso Qt para a interface funcionar offline.
 
 ## Pacote para o Mainuan
 
 ```bash
-sudo apt-get install devscripts equivs
-sudo mk-build-deps -i -r debian/control
+sudo apt-get install devscripts
+sudo apt-get build-dep ./
 dpkg-buildpackage -us -uc -b
-sudo apt-get install ../mainuan-welcome_*_amd64.deb
+sudo apt-get install ../mainuan-welcome_2.2.0_amd64.deb
 ```
+
+O `dpkg-buildpackage` roda os testes e grava o `.deb` (e os `.buildinfo`/`.changes`) na pasta acima do código. Se a mesma versão já estiver instalada, o `apt-get install` não faz nada: use `--reinstall`. Para limpar o código depois, `git clean -fdX` remove o que o build gerou (`obj-*`, `debian/mainuan-welcome/`, `build/`, `stage/`).
 
 O pacote instala também `/etc/xdg/autostart/org.mainuan.Welcome.desktop`, que abre o Welcome ao entrar na sessão; cada usuário pode desativar isso pela opção “Mostrar esta tela ao iniciar o sistema”.
 
@@ -95,7 +97,7 @@ Antes de cada troca, `plasma-org.kde.plasma.desktop-appletsrc` e `plasmashellrc`
 
 ## Sobre e relatório da máquina
 
-A página Sobre mostra o sistema e um resumo deste computador. **Relatório da máquina** reúne sistema, área de trabalho, hardware, gráficos, memória, armazenamento, pacotes, inicialização e rede a partir de `/etc`, `/proc`, `/sys` e, com tempo-limite, `lspci`, `lsblk`, `glxinfo`, `plasmashell` e `dpkg-query`, e pode ser copiado ou salvo como texto. O relatório não contém endereços IP, nomes de rede, números de série nem o nome do computador, e os endereços MAC aparecem mascarados. A data da instalação vem do registro do instalador (`/var/log/installer`); sem ele, a data de criação do sistema de arquivos raiz é mostrada como estimada.
+A página Sobre mostra o sistema e um resumo deste computador. **Relatório da máquina** reúne sistema, área de trabalho, hardware, gráficos, memória, armazenamento, pacotes, inicialização e rede a partir de `/etc`, `/proc`, `/sys`, da versão que o Plasma publica no D-Bus e, com tempo-limite, `lspci`, `lsblk`, `glxinfo` e `dpkg-query`, e pode ser copiado ou salvo como texto. O relatório não contém endereços IP, nomes de rede, números de série nem o nome do computador, e os endereços MAC aparecem mascarados. A data da instalação vem do registro do instalador (`/var/log/installer`); sem ele, a data de criação do sistema de arquivos raiz é mostrada como estimada.
 
 ## Página Contribuir (Pix)
 
