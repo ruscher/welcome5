@@ -5,6 +5,7 @@
 #include "services/PackageService.h"
 #include "services/StartupPreference.h"
 #include "services/SystemService.h"
+#include "services/VisualStyle.h"
 
 #include <QtTest>
 
@@ -117,7 +118,12 @@ private slots:
     void acceptsOnlyHexAccentColors();
     void rejectsUnexpectedPackageIds();
     void acceptsOnlyKnownLayouts();
-    void mapsVisualStyles();
+    void mapsVisualStylesToMainuanThemes();
+    void detectsVisualStyleFromPlasmaConfig();
+    void appliesVisualStyleProfiles();
+    void reportsVisualStyleFailures();
+    void switchesThemeWithinTheActiveStyle();
+    void recordsTheChosenAccentColor();
     void exposesModelRolesAndLocalVideoCatalog();
 
     void parsesHelperProtocol();
@@ -175,20 +181,272 @@ void MainuanTest::acceptsOnlyKnownLayouts()
     QVERIFY(!SystemService::isAllowedLayout(QStringLiteral("../../tmp")));
 }
 
-void MainuanTest::mapsVisualStyles()
+void MainuanTest::mapsVisualStylesToMainuanThemes()
 {
+    const VisualStyleProfile *dream = VisualStyles::find(QStringLiteral("blur"));
+    const VisualStyleProfile *tahoe = VisualStyles::find(QStringLiteral("glass"));
+    const VisualStyleProfile *breeze = VisualStyles::find(QStringLiteral("solid"));
+    QVERIFY(dream && tahoe && breeze);
+    QCOMPARE(dream->name, QStringLiteral("Dream"));
+    QCOMPARE(dream->package(false), QStringLiteral("Dream-Light-Color-Global-6"));
+    QCOMPARE(dream->package(true), QStringLiteral("Dream-Dark-Color-Global-6"));
+    QCOMPARE(dream->wallpaper, QStringLiteral("01ciano.png"));
+    QCOMPARE(tahoe->name, QStringLiteral("Tahoe"));
+    QCOMPARE(tahoe->package(false), QStringLiteral("com.github.vinceliuice.MacTahoe-Light"));
+    QCOMPARE(tahoe->package(true), QStringLiteral("com.github.vinceliuice.MacTahoe-Dark"));
+    QCOMPARE(tahoe->wallpaper, QStringLiteral("01ciano.png"));
+    QCOMPARE(breeze->name, QStringLiteral("Breeze"));
+    QCOMPARE(breeze->package(false), QStringLiteral("org.kde.breeze.desktop"));
+    QCOMPARE(breeze->package(true), QStringLiteral("org.kde.breezedark.desktop"));
+    QCOMPARE(breeze->wallpaper, QStringLiteral("02cinza.png"));
+    QCOMPARE(VisualStyles::profiles().size(), 3);
+
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("blur")));
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("glass")));
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("solid")));
-    QVERIFY(!SystemService::isAllowedVisualStyle(QStringLiteral("'; panels().forEach(p => p.remove()); '")));
+    QVERIFY(!SystemService::isAllowedVisualStyle(QStringLiteral("Dream-Light-Color-Global-6")));
+    QVERIFY(!SystemService::isAllowedVisualStyle(QStringLiteral("blur; plasmashell --replace")));
+    QVERIFY(!SystemService::isAllowedVisualStyle(QStringLiteral("$(id)")));
+    QVERIFY(!SystemService::isAllowedVisualStyle(QString()));
+}
 
-    const QStringList translucent = {QStringLiteral("adaptive"), QStringLiteral("translucent")};
-    QCOMPARE(SystemService::visualStyleFor(true, 15, translucent), QStringLiteral("blur"));
-    QCOMPARE(SystemService::visualStyleFor(true, 4, translucent), QStringLiteral("glass"));
-    QCOMPARE(SystemService::visualStyleFor(false, 15, translucent), QStringLiteral("glass"));
-    QCOMPARE(SystemService::visualStyleFor(true, 15, {QStringLiteral("opaque"), QStringLiteral("opaque")}),
-             QStringLiteral("solid"));
-    QCOMPARE(SystemService::visualStyleFor(true, 15, {}), QStringLiteral("blur"));
+void MainuanTest::detectsVisualStyleFromPlasmaConfig()
+{
+    using VisualStyles::detect;
+    QCOMPARE(detect(QStringLiteral("Dream-Light-Color-Global-6"), {}), QStringLiteral("blur"));
+    QCOMPARE(detect(QStringLiteral("Dream-Dark-Color-Global-6"), QStringLiteral("Dream-Color-Plasma")), QStringLiteral("blur"));
+    QCOMPARE(detect(QStringLiteral("com.github.vinceliuice.MacTahoe-Dark"), {}), QStringLiteral("glass"));
+    QCOMPARE(detect(QStringLiteral("org.kde.breezedark.desktop"), {}), QStringLiteral("solid"));
+    // Breeze is Plasma's default package and is not written to kdeglobals.
+    QCOMPARE(detect({}, {}), QStringLiteral("solid"));
+    QCOMPARE(detect({}, QStringLiteral("default")), QStringLiteral("solid"));
+    // A fresh Mainuan install sets the Dream Plasma theme without a package id.
+    QCOMPARE(detect({}, QStringLiteral("Dream-Color-Plasma")), QStringLiteral("blur"));
+    QCOMPARE(detect({}, QStringLiteral("MacTahoe-Light")), QStringLiteral("glass"));
+    // Other global themes are not one of the three styles.
+    QVERIFY(detect(QStringLiteral("org.kde.oxygen"), {}).isEmpty());
+    QVERIFY(detect({}, QStringLiteral("Sweet")).isEmpty());
+}
+
+namespace {
+
+// A user home and a system data directory with the Mainuan themes, plus the
+// simulated Plasma tools from tests/fixtures/plasma.
+class PlasmaSandbox
+{
+public:
+    PlasmaSandbox()
+    {
+        const QString data = m_root.filePath(QStringLiteral("data"));
+        for (const VisualStyleProfile &profile : VisualStyles::profiles()) {
+            for (const QString &package : {profile.lightPackage, profile.darkPackage}) {
+                touch(data + QStringLiteral("/plasma/look-and-feel/") + package + QStringLiteral("/metadata.json"));
+            }
+        }
+        touch(data + QStringLiteral("/wallpapers/01ciano.png"));
+        touch(data + QStringLiteral("/wallpapers/02cinza.png"));
+        for (const QString &icons : {QStringLiteral("breeze"), QStringLiteral("breeze-dark"), QStringLiteral("kora-cyan")}) {
+            touch(data + QStringLiteral("/icons/") + icons + QStringLiteral("/index.theme"));
+        }
+        // Cursor themes Mainuan ships (MacTahoe's are missing there too).
+        touch(data + QStringLiteral("/icons/breeze_cursors/cursors/default"));
+        touch(data + QStringLiteral("/icons/cyan-cursor/cursors/default"));
+
+        qputenv("XDG_CONFIG_HOME", config().toLocal8Bit());
+        qputenv("XDG_CONFIG_DIRS", m_root.filePath(QStringLiteral("xdg")).toLocal8Bit());
+        qputenv("XDG_DATA_HOME", m_root.filePath(QStringLiteral("home-data")).toLocal8Bit());
+        qputenv("XDG_DATA_DIRS", data.toLocal8Bit());
+        qputenv("MOCK_LOG", log().toLocal8Bit());
+        QDir().mkpath(config());
+    }
+
+    ~PlasmaSandbox()
+    {
+        for (const char *name : {"XDG_CONFIG_HOME", "XDG_CONFIG_DIRS", "XDG_DATA_HOME", "XDG_DATA_DIRS", "MOCK_LOG",
+                                 "MOCK_LNF_FAIL", "MOCK_LNF_NOOP", "MOCK_WALLPAPER_FAIL"}) {
+            qunsetenv(name);
+        }
+    }
+
+    QString config() const { return m_root.filePath(QStringLiteral("config")); }
+    QString log() const { return m_root.filePath(QStringLiteral("calls.log")); }
+    QString data() const { return m_root.filePath(QStringLiteral("data")); }
+    static QString tools() { return QStringLiteral(MAINUAN_TEST_FIXTURES "/plasma"); }
+
+    QStringList takeCalls() const
+    {
+        QFile file(log());
+        if (!file.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        const QStringList calls = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        file.close();
+        file.remove();
+        return calls;
+    }
+
+private:
+    static void touch(const QString &path)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+
+    QTemporaryDir m_root;
+};
+
+bool waitIdle(const SystemService &service)
+{
+    return QTest::qWaitFor([&service]() { return !service.busy(); }, 10000);
+}
+
+} // namespace
+
+void MainuanTest::appliesVisualStyleProfiles()
+{
+    PlasmaSandbox sandbox;
+    SystemService service;
+    service.setToolSearchPaths({PlasmaSandbox::tools()});
+    QVERIFY(service.visualStyleAvailable());
+    QCOMPARE(service.installedVisualStyles(), (QStringList{QStringLiteral("blur"), QStringLiteral("glass"), QStringLiteral("solid")}));
+    QCOMPARE(service.visualStyle(), QStringLiteral("solid")); // empty config: Plasma defaults
+
+    service.setVisualStyle(QStringLiteral("blur"));
+    QVERIFY(service.busy());
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Dream aplicado."));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{
+        QStringLiteral("lookandfeel Dream-Light-Color-Global-6"),
+        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+
+    // Tahoe names icon and cursor themes Mainuan does not ship: Breeze fallbacks.
+    service.setVisualStyle(QStringLiteral("glass"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("glass"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Tahoe aplicado."));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{
+        QStringLiteral("lookandfeel com.github.vinceliuice.MacTahoe-Light"),
+        QStringLiteral("plasma-changeicons breeze"),
+        QStringLiteral("plasma-apply-cursortheme breeze_cursors"),
+        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+
+    service.setVisualStyle(QStringLiteral("solid"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("solid"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Breeze aplicado."));
+    QVERIFY(sandbox.takeCalls().constLast().endsWith(QStringLiteral("/wallpapers/02cinza.png")));
+
+    // Repeated switching keeps working and the state is read back by a new instance.
+    for (const QString &style : {QStringLiteral("blur"), QStringLiteral("solid"), QStringLiteral("glass")}) {
+        service.setVisualStyle(style);
+        QVERIFY(waitIdle(service));
+        QCOMPARE(service.visualStyle(), style);
+    }
+    SystemService reopened;
+    QCOMPARE(reopened.visualStyle(), QStringLiteral("glass"));
+}
+
+void MainuanTest::reportsVisualStyleFailures()
+{
+    PlasmaSandbox sandbox;
+    SystemService service;
+    service.setToolSearchPaths({PlasmaSandbox::tools()});
+
+    service.setVisualStyle(QStringLiteral("unknown"));
+    QVERIFY(!service.busy());
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Estilo visual inválido."));
+
+    // The essential step fails: no success and the selection does not move.
+    qputenv("MOCK_LNF_FAIL", "1");
+    service.setVisualStyle(QStringLiteral("blur"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("solid"));
+    QVERIFY(service.lastMessage().startsWith(QStringLiteral("Erro: Não foi possível aplicar o estilo Dream.")));
+    QVERIFY(sandbox.takeCalls().isEmpty());
+    qunsetenv("MOCK_LNF_FAIL");
+
+    // The tool reports success but Plasma's configuration does not change.
+    qputenv("MOCK_LNF_NOOP", "1");
+    service.setVisualStyle(QStringLiteral("glass"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("solid"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: O Plasma não confirmou o estilo Tahoe."));
+    qunsetenv("MOCK_LNF_NOOP");
+    sandbox.takeCalls();
+
+    // A secondary step fails: the style is applied and the gap is reported.
+    qputenv("MOCK_WALLPAPER_FAIL", "1");
+    service.setVisualStyle(QStringLiteral("blur"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Estilo Dream aplicado. Não foi possível ajustar: papel de parede."));
+    qunsetenv("MOCK_WALLPAPER_FAIL");
+
+    // Missing package.
+    QVERIFY(QFile::remove(sandbox.data() + QStringLiteral("/plasma/look-and-feel/org.kde.breeze.desktop/metadata.json")));
+    service.setVisualStyle(QStringLiteral("solid"));
+    QVERIFY(!service.busy());
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: O estilo Breeze não está instalado neste sistema."));
+    service.refresh();
+    QVERIFY(!service.installedVisualStyles().contains(QStringLiteral("solid")));
+
+    // Missing plasma-apply-lookandfeel.
+    QTemporaryDir noTools;
+    service.setToolSearchPaths({noTools.path()});
+    QVERIFY(!service.visualStyleAvailable());
+    service.setVisualStyle(QStringLiteral("glass"));
+    QVERIFY(!service.busy());
+    QVERIFY(service.lastMessage().contains(QStringLiteral("plasma-apply-lookandfeel")));
+    QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
+}
+
+void MainuanTest::switchesThemeWithinTheActiveStyle()
+{
+    PlasmaSandbox sandbox;
+    SystemService service;
+    service.setToolSearchPaths({PlasmaSandbox::tools()});
+    service.setVisualStyle(QStringLiteral("blur"));
+    QVERIFY(waitIdle(service));
+    QVERIFY(!service.darkTheme());
+    sandbox.takeCalls();
+
+    service.setTheme(QStringLiteral("dark"));
+    QVERIFY(waitIdle(service));
+    QVERIFY(service.darkTheme());
+    QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Tema escuro aplicado."));
+    // The theme switch keeps the wallpaper.
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("lookandfeel Dream-Dark-Color-Global-6")}));
+
+    // A style chosen in dark mode uses the dark variant.
+    service.setVisualStyle(QStringLiteral("solid"));
+    QVERIFY(waitIdle(service));
+    QVERIFY(service.darkTheme());
+    QCOMPARE(sandbox.takeCalls().constFirst(), QStringLiteral("lookandfeel org.kde.breezedark.desktop"));
+}
+
+void MainuanTest::recordsTheChosenAccentColor()
+{
+    PlasmaSandbox sandbox;
+    SystemService service;
+    service.setToolSearchPaths({PlasmaSandbox::tools()});
+
+    service.setAccent(QStringLiteral("#E8177D"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("plasma-apply-colorscheme --accent-color #e8177d")}));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Cor de destaque aplicada."));
+    QCOMPARE(service.accentColor(), QStringLiteral("#e8177d"));
+    // Stored where System Settings stores it, so Plasma keeps it across global themes.
+    QFile globals(sandbox.config() + QStringLiteral("/kdeglobals"));
+    QVERIFY(globals.open(QIODevice::ReadOnly));
+    QVERIFY(globals.readAll().contains("AccentColor=232,23,125"));
+
+    service.setAccent(QStringLiteral("red; rm -rf ~"));
+    QVERIFY(!service.busy());
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Cor de destaque inválida."));
+    QVERIFY(sandbox.takeCalls().isEmpty());
 }
 
 void MainuanTest::exposesModelRolesAndLocalVideoCatalog()

@@ -89,8 +89,8 @@ Kirigami.Page {
                         Layout.fillWidth: true
                         title: "Estilo visual"
                         subtitle: page.system.visualStyleAvailable
-                                  ? "Transparência e desfoque dos painéis e das janelas."
-                                  : "Disponível apenas em uma sessão do KDE Plasma em execução."
+                                  ? "Muda o visual completo do Plasma: painéis, janelas, ícones e papel de parede."
+                                  : "Disponível apenas no KDE Plasma."
                         iconName: "preferences-desktop-effects"
                         accent: page.accent; textColor: page.textColor; mutedColor: page.mutedColor
                         compactWidth: 720
@@ -99,10 +99,11 @@ Kirigami.Page {
                             enabled: page.system.visualStyleAvailable && !page.system.busy
                             groupName: "Estilo visual"
                             current: page.system.visualStyle
+                            availableValues: page.system.installedVisualStyles
                             options: [
-                                { value: "blur", label: "Desfocado", icon: "blur" },
-                                { value: "glass", label: "Vítreo", icon: "window" },
-                                { value: "solid", label: "Sólido", icon: "object-fill" }
+                                { value: "blur", label: "Desfocado", icon: "blur", tooltip: "Tema Dream: painéis translúcidos com desfoque" },
+                                { value: "glass", label: "Vítreo", icon: "window", tooltip: "Tema Tahoe: painéis claros com efeito de vidro" },
+                                { value: "solid", label: "Sólido", icon: "object-fill", tooltip: "Tema Breeze: o visual padrão do KDE, sem transparência" }
                             ]
                             onActivated: (value) => page.system.setVisualStyle(value)
                         }
@@ -134,7 +135,7 @@ Kirigami.Page {
                     SettingRow {
                         Layout.fillWidth: true
                         title: "Cor de destaque"
-                        subtitle: "Cor usada em botões, seleções e elementos ativos."
+                        subtitle: "Cor usada em botões, seleções e elementos ativos. A cor escolhida é mantida ao trocar o estilo visual."
                         iconName: "color-picker"
                         accent: page.accent; textColor: page.textColor; mutedColor: page.mutedColor
 
@@ -152,10 +153,18 @@ Kirigami.Page {
                                     implicitHeight: 30
                                     enabled: !page.system.busy
                                     focusPolicy: Qt.StrongFocus
-                                    onClicked: if (!selected) page.system.setAccent(modelData.color)
+                                    checkable: true
+                                    checked: selected
+                                    // As in SegmentedChoice: AT-SPI toggles `checked` without clicked().
+                                    onCheckedChanged: {
+                                        if (checked === selected)
+                                            return;
+                                        const requested = checked;
+                                        checked = Qt.binding(() => selected);
+                                        if (requested)
+                                            page.system.setAccent(modelData.color);
+                                    }
                                     Accessible.role: Accessible.RadioButton
-                                    Accessible.checkable: true
-                                    Accessible.checked: selected
                                     Accessible.name: "Cor de destaque " + modelData.name
                                     Controls.ToolTip.visible: hovered
                                     Controls.ToolTip.text: modelData.name

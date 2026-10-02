@@ -1,6 +1,7 @@
 #pragma once
 
-#include <QFileSystemWatcher>
+#include <KConfigWatcher>
+
 #include <QList>
 #include <QObject>
 #include <QProcess>
@@ -9,6 +10,8 @@
 
 #include <functional>
 
+struct VisualStyleProfile;
+
 class SystemService final : public QObject
 {
     Q_OBJECT
@@ -16,6 +19,7 @@ class SystemService final : public QObject
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY accentColorChanged)
     Q_PROPERTY(QString visualStyle READ visualStyle NOTIFY visualStyleChanged)
     Q_PROPERTY(bool visualStyleAvailable READ visualStyleAvailable NOTIFY visualStyleChanged)
+    Q_PROPERTY(QStringList installedVisualStyles READ installedVisualStyles NOTIFY visualStyleChanged)
     Q_PROPERTY(QString sessionType READ sessionType CONSTANT)
     Q_PROPERTY(QString logoSource READ logoSource CONSTANT)
     Q_PROPERTY(QString plasmaVersion READ plasmaVersion NOTIFY plasmaVersionChanged)
@@ -33,6 +37,7 @@ public:
     QString accentColor() const;
     QString visualStyle() const;
     bool visualStyleAvailable() const;
+    QStringList installedVisualStyles() const;
     QString sessionType() const;
     // file:// URL of the official Mainuan logo, empty when it is not installed.
     QString logoSource() const;
@@ -47,8 +52,9 @@ public:
     static bool isValidAccent(const QString &value);
     static bool isAllowedLayout(const QString &value);
     static bool isAllowedVisualStyle(const QString &value);
-    // "blur", "glass" or "solid" from the KWin blur settings and panel opacities.
-    static QString visualStyleFor(bool blurEnabled, int blurStrength, const QStringList &panelOpacities);
+
+    // Directories searched for the Plasma tools instead of PATH (tests only).
+    void setToolSearchPaths(const QStringList &paths);
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void setTheme(const QString &theme);
@@ -74,6 +80,7 @@ private:
     {
         QString program;
         QStringList arguments;
+        QString label; // what failed, for partial-failure messages
     };
 
     void readDesktopState();
@@ -85,11 +92,18 @@ private:
     void setBusy(bool busy);
     void runCommands(QList<Command> commands, const QString &successMessage, const QString &errorPrefix,
                      std::function<void()> onSuccess = {});
-    void applyPanelOpacity(const QString &opacity, const QString &successMessage);
-    void updateConfigWatcher();
+    QString findTool(const QString &name) const;
+    void runTool(const QString &program, const QStringList &arguments,
+                 std::function<void(bool ok, const QString &errorOutput)> done);
+    void applyStyleProfile(const VisualStyleProfile &profile, bool dark, bool withWallpaper,
+                           const QString &successMessage);
+    void runStyleFollowUps(QList<Command> steps, QStringList failures,
+                           std::function<void(const QStringList &failures)> done);
 
-    QFileSystemWatcher m_configWatcher;
-    QString m_configPath;
+    KConfigWatcher::Ptr m_globalsWatcher;
+    KConfigWatcher::Ptr m_plasmaWatcher;
+    QStringList m_toolPaths;
+    QStringList m_installedVisualStyles;
     QString m_accentColor;
     QString m_visualStyle;
     QString m_plasmaVersion;

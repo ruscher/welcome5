@@ -23,6 +23,9 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 )
 
 find_package(Qt6 6.5 QUIET COMPONENTS Test)
+# KConfig reads Plasma settings through the same cascade Plasma uses
+# (~/.config/kdedefaults holds the values written by global themes).
+find_package(KF6Config 6.0 REQUIRED)
 find_package(KF6Kirigami QUIET CONFIG)
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -33,6 +36,8 @@ endif()
 add_library(mainuan-core STATIC
     src/services/SystemService.cpp
     src/services/SystemService.h
+    src/services/VisualStyle.cpp
+    src/services/VisualStyle.h
     src/services/PackageService.cpp
     src/services/PackageService.h
     src/services/InstallService.cpp
@@ -58,6 +63,7 @@ target_link_libraries(mainuan-core PUBLIC
     Qt6::Gui
     Qt6::DBus
     Qt6::Network
+    KF6::ConfigCore
 )
 
 target_compile_options(mainuan-core PRIVATE

@@ -1,82 +1,97 @@
 #include "SystemService.h"
 
+#include "VisualStyle.h"
+
+#include <KConfigGroup>
+#include <KSharedConfig>
+
 #include <QColor>
 #include <QClipboard>
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QProcessEnvironment>
+#include <QLoggingCategory>
 #include <QPalette>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 #include <memory>
-#include <algorithm>
+
+Q_LOGGING_CATEGORY(lcAppearance, "mainuan.welcome.appearance")
 
 namespace {
-
-QString kdeGlobalsPath()
-{
-    const QString configHome = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    return QDir(configHome).filePath(QStringLiteral("kdeglobals"));
-}
-
-QString colorFromValue(const QVariant &value)
-{
-    // QSettings reads Plasma's "61,174,233" as a list of three strings.
-    const QString raw = value.metaType().id() == QMetaType::QStringList
-        ? value.toStringList().join(QLatin1Char(',')).trimmed()
-        : value.toString().trimmed();
-    QColor color(raw);
-    if (color.isValid()) {
-        return color.name(QColor::HexRgb).toLower();
-    }
-
-    const QStringList channels = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
-    if (channels.size() == 3) {
-        bool okRed = false;
-        bool okGreen = false;
-        bool okBlue = false;
-        const int red = channels.at(0).trimmed().toInt(&okRed);
-        const int green = channels.at(1).trimmed().toInt(&okGreen);
-        const int blue = channels.at(2).trimmed().toInt(&okBlue);
-        if (okRed && okGreen && okBlue && red >= 0 && red <= 255 && green >= 0 && green <= 255
-            && blue >= 0 && blue <= 255) {
-            return QColor(red, green, blue).name(QColor::HexRgb).toLower();
-        }
-    }
-
-    return {};
-}
-
-// KWin's default blur strength (blur.kcfg) and the values used by the styles.
-constexpr int kDefaultBlurStrength = 15;
-constexpr int kBlurStrength = 15;
-constexpr int kGlassStrength = 4;
-constexpr int kBlurThreshold = 9;
 
 // Shipped by the Mainuan artwork; referenced in place instead of bundling a copy.
 const QString kMainuanLogo = QStringLiteral("/usr/share/plasma/avatars/logoMainuan.png");
 
-QString kwinrcPath()
+// Reads a KDE configuration file through the whole cascade
+// ($XDG_CONFIG_HOME, then $XDG_CONFIG_DIRS, which in a Plasma session starts
+// with ~/.config/kdedefaults where global themes write their values).
+KSharedConfig::Ptr freshConfig(const QString &name)
 {
-    const QString configHome = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    return QDir(configHome).filePath(QStringLiteral("kwinrc"));
+    KSharedConfig::Ptr config = KSharedConfig::openConfig(name);
+    config->reparseConfiguration();
+    return config;
 }
 
-QDBusMessage plasmaScript(const QString &script)
+bool lookAndFeelInstalled(const QString &package)
 {
-    QDBusMessage message = QDBusMessage::createMethodCall(
-        QStringLiteral("org.kde.plasmashell"), QStringLiteral("/PlasmaShell"),
-        QStringLiteral("org.kde.PlasmaShell"), QStringLiteral("evaluateScript"));
-    message << script;
-    return message;
+    const QString base = QStringLiteral("plasma/look-and-feel/") + package;
+    return !QStandardPaths::locate(QStandardPaths::GenericDataLocation, base + QStringLiteral("/metadata.json")).isEmpty()
+        || !QStandardPaths::locate(QStandardPaths::GenericDataLocation, base + QStringLiteral("/metadata.desktop")).isEmpty();
+}
+
+bool iconThemeInstalled(const QString &theme)
+{
+    return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                   QStringLiteral("icons/") + theme + QStringLiteral("/index.theme")).isEmpty();
+}
+
+bool cursorThemeInstalled(const QString &theme)
+{
+    return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                   QStringLiteral("icons/") + theme + QStringLiteral("/cursors"),
+                                   QStandardPaths::LocateDirectory).isEmpty();
+}
+
+// plasma-changeicons is installed in plasma-workspace's libexec directory.
+QStringList libexecDirectories()
+{
+    QStringList directories = {QStringLiteral("/usr/libexec"), QStringLiteral("/usr/lib/libexec")};
+    const QStringList multiarch = QDir(QStringLiteral("/usr/lib")).entryList({QStringLiteral("*-linux-gnu*")}, QDir::Dirs);
+    for (const QString &triplet : multiarch) {
+        directories << QStringLiteral("/usr/lib/") + triplet + QStringLiteral("/libexec");
+    }
+    return directories;
+}
+
+// KDE stores colors as "r,g,b" (or a name). Parsed here instead of through
+// KConfigGui, which is not linked. Values Plasma cannot parse either, such as
+// "r,g,b ; #hex", are rejected so the Welcome reports the colors in effect.
+QColor configColor(const KConfigGroup &group, const char *key)
+{
+    const QString raw = group.readEntry(key, QString()).trimmed();
+    const QStringList channels = raw.split(QLatin1Char(','));
+    if (channels.size() == 3) {
+        int rgb[3];
+        for (int i = 0; i < 3; ++i) {
+            bool ok = false;
+            rgb[i] = channels.at(i).trimmed().toInt(&ok);
+            if (!ok || rgb[i] < 0 || rgb[i] > 255) {
+                return {};
+            }
+        }
+        return QColor(rgb[0], rgb[1], rgb[2]);
+    }
+    return raw.startsWith(QLatin1Char('#')) ? QColor(raw) : QColor();
+}
+
+QString lastLine(const QString &text)
+{
+    const QStringList lines = text.trimmed().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    return lines.isEmpty() ? QString() : lines.constLast().trimmed();
 }
 
 bool isDarkScheme(const QString &scheme)
@@ -90,16 +105,20 @@ bool isDarkScheme(const QString &scheme)
 
 SystemService::SystemService(QObject *parent)
     : QObject(parent)
-    , m_configPath(kdeGlobalsPath())
     , m_sessionType(qEnvironmentVariable("XDG_SESSION_TYPE", QStringLiteral("unknown")).toLower())
     , m_logoSource(QFileInfo(kMainuanLogo).isReadable() ? QUrl::fromLocalFile(kMainuanLogo).toString() : QString())
 {
-    connect(&m_configWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
+    // Plasma writes appearance settings with KConfig::Notify; follow changes made
+    // elsewhere (System Settings, another tool) without polling.
+    const auto onAppearanceChanged = [this](const KConfigGroup &, const QByteArrayList &) {
         readDesktopState();
-        updateConfigWatcher();
-    });
+        readVisualStyle();
+    };
+    m_globalsWatcher = KConfigWatcher::create(KSharedConfig::openConfig(QStringLiteral("kdeglobals")));
+    m_plasmaWatcher = KConfigWatcher::create(KSharedConfig::openConfig(QStringLiteral("plasmarc")));
+    connect(m_globalsWatcher.data(), &KConfigWatcher::configChanged, this, onAppearanceChanged);
+    connect(m_plasmaWatcher.data(), &KConfigWatcher::configChanged, this, onAppearanceChanged);
 
-    updateConfigWatcher();
     refresh();
 }
 
@@ -121,6 +140,26 @@ QString SystemService::visualStyle() const
 bool SystemService::visualStyleAvailable() const
 {
     return m_visualStyleAvailable;
+}
+
+QStringList SystemService::installedVisualStyles() const
+{
+    return m_installedVisualStyles;
+}
+
+void SystemService::setToolSearchPaths(const QStringList &paths)
+{
+    m_toolPaths = paths;
+    readVisualStyle();
+}
+
+QString SystemService::findTool(const QString &name) const
+{
+    if (!m_toolPaths.isEmpty()) {
+        return QStandardPaths::findExecutable(name, m_toolPaths);
+    }
+    const QString inPath = QStandardPaths::findExecutable(name);
+    return inPath.isEmpty() ? QStandardPaths::findExecutable(name, libexecDirectories()) : inPath;
 }
 
 QString SystemService::sessionType() const
@@ -187,18 +226,7 @@ bool SystemService::isAllowedLayout(const QString &value)
 
 bool SystemService::isAllowedVisualStyle(const QString &value)
 {
-    return value == QStringLiteral("blur") || value == QStringLiteral("glass") || value == QStringLiteral("solid");
-}
-
-QString SystemService::visualStyleFor(bool blurEnabled, int blurStrength, const QStringList &panelOpacities)
-{
-    const bool allOpaque = !panelOpacities.isEmpty()
-        && std::all_of(panelOpacities.cbegin(), panelOpacities.cend(),
-                       [](const QString &opacity) { return opacity.trimmed() == QStringLiteral("opaque"); });
-    if (allOpaque) {
-        return QStringLiteral("solid");
-    }
-    return blurEnabled && blurStrength >= kBlurThreshold ? QStringLiteral("blur") : QStringLiteral("glass");
+    return VisualStyles::find(value) != nullptr;
 }
 
 void SystemService::refresh()
@@ -212,15 +240,17 @@ void SystemService::refresh()
 
 void SystemService::readDesktopState()
 {
-    // QSettings maps an INI "[General]" section to top-level keys, so no group here.
-    QSettings settings(m_configPath, QSettings::IniFormat);
+    const KSharedConfig::Ptr globals = freshConfig(QStringLiteral("kdeglobals"));
 
-    // Prefer the window color written by the active scheme; scheme names are a weaker hint.
-    const QString windowColor = colorFromValue(settings.value(QStringLiteral("Colors:Window/BackgroundNormal")));
-    const QString scheme = settings.value(QStringLiteral("ColorScheme")).toString();
-    bool newDark = QGuiApplication::palette().window().color().lightness() < 128;
-    if (!windowColor.isEmpty()) {
-        newDark = QColor(windowColor).lightness() < 128;
+    // Prefer the window color of the active scheme; its name is a weaker hint.
+    const QColor window = configColor(KConfigGroup(globals, QStringLiteral("Colors:Window")), "BackgroundNormal");
+    const QString scheme = KConfigGroup(globals, QStringLiteral("General")).readEntry("ColorScheme", QString());
+    // The palette fallbacks need a QGuiApplication (headless tests only have a
+    // QCoreApplication; qGuiApp is a static_cast and cannot tell).
+    const bool guiApplication = qobject_cast<QGuiApplication *>(QCoreApplication::instance()) != nullptr;
+    bool newDark = guiApplication && QGuiApplication::palette().window().color().lightness() < 128;
+    if (window.isValid()) {
+        newDark = window.lightness() < 128;
     } else if (!scheme.isEmpty()) {
         newDark = isDarkScheme(scheme);
     }
@@ -229,10 +259,17 @@ void SystemService::readDesktopState()
         emit darkThemeChanged();
     }
 
-    QString newAccent = colorFromValue(settings.value(QStringLiteral("AccentColor")));
-    if (newAccent.isEmpty()) {
-        newAccent = QGuiApplication::palette().highlight().color().name(QColor::HexRgb).toLower();
+    // AccentColor is written by System Settings and by setAccent(); when only
+    // plasma-apply-colorscheme --accent-color was used, the tinted selection
+    // color is the accent in effect.
+    QColor accent = configColor(KConfigGroup(globals, QStringLiteral("General")), "AccentColor");
+    if (!accent.isValid()) {
+        accent = configColor(KConfigGroup(globals, QStringLiteral("Colors:Selection")), "BackgroundNormal");
     }
+    if (!accent.isValid() && guiApplication) {
+        accent = QGuiApplication::palette().highlight().color();
+    }
+    const QString newAccent = accent.name(QColor::HexRgb).toLower();
     if (newAccent != m_accentColor) {
         m_accentColor = newAccent;
         emit accentColorChanged();
@@ -312,31 +349,30 @@ void SystemService::refreshDiagnostics()
 
 void SystemService::readVisualStyle()
 {
-    QSettings kwin(kwinrcPath(), QSettings::IniFormat);
-    const bool blurEnabled = kwin.value(QStringLiteral("Plugins/blurEnabled"), true).toString() != QStringLiteral("false");
-    bool ok = false;
-    int strength = kwin.value(QStringLiteral("Effect-blur/BlurStrength")).toInt(&ok);
-    if (!ok) {
-        strength = kDefaultBlurStrength;
+    const QString lookAndFeel = KConfigGroup(freshConfig(QStringLiteral("kdeglobals")), QStringLiteral("KDE"))
+                                    .readEntry("LookAndFeelPackage", QString());
+    const QString plasmaTheme = KConfigGroup(freshConfig(QStringLiteral("plasmarc")), QStringLiteral("Theme"))
+                                    .readEntry("name", QString());
+    const QString style = VisualStyles::detect(lookAndFeel, plasmaTheme);
+    const bool available = !findTool(QStringLiteral("plasma-apply-lookandfeel")).isEmpty();
+
+    QStringList installed;
+    for (const VisualStyleProfile &profile : VisualStyles::profiles()) {
+        if (lookAndFeelInstalled(profile.lightPackage) && lookAndFeelInstalled(profile.darkPackage)) {
+            installed << profile.id;
+        }
     }
 
-    auto *watcher = new QDBusPendingCallWatcher(
-        QDBusConnection::sessionBus().asyncCall(plasmaScript(QStringLiteral(
-            "print(panels().map(function (panel) { return panel.opacity; }).join(','));"))),
-        this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, blurEnabled, strength](QDBusPendingCallWatcher *call) {
-        const QDBusPendingReply<QString> reply = *call;
-        call->deleteLater();
-        const bool available = !reply.isError();
-        const QString style = available
-            ? visualStyleFor(blurEnabled, strength, reply.value().split(QLatin1Char(','), Qt::SkipEmptyParts))
-            : QString();
-        if (available != m_visualStyleAvailable || style != m_visualStyle) {
-            m_visualStyleAvailable = available;
-            m_visualStyle = style;
-            emit visualStyleChanged();
+    if (style != m_visualStyle || available != m_visualStyleAvailable || installed != m_installedVisualStyles) {
+        if (style != m_visualStyle) {
+            qCInfo(lcAppearance).nospace() << "visual style: " << (style.isEmpty() ? QStringLiteral("other") : style)
+                                           << " (LookAndFeelPackage=" << lookAndFeel << ", plasma theme=" << plasmaTheme << ')';
         }
-    });
+        m_visualStyle = style;
+        m_visualStyleAvailable = available;
+        m_installedVisualStyles = installed;
+        emit visualStyleChanged();
+    }
 }
 
 void SystemService::setMessage(const QString &message, bool error)
@@ -412,7 +448,21 @@ void SystemService::setTheme(const QString &theme)
         return;
     }
 
-    const QString executable = QStandardPaths::findExecutable(QStringLiteral("plasma-apply-colorscheme"));
+    if (m_busy) {
+        setMessage(QStringLiteral("Aguarde a operação atual terminar."), true);
+        return;
+    }
+
+    // With a Mainuan style active, switch to its light or dark variant so the
+    // theme and the style stay consistent.
+    if (const VisualStyleProfile *profile = VisualStyles::find(m_visualStyle)) {
+        applyStyleProfile(*profile, theme == QStringLiteral("dark"), false,
+                          theme == QStringLiteral("dark") ? QStringLiteral("Tema escuro aplicado.")
+                                                          : QStringLiteral("Tema claro aplicado."));
+        return;
+    }
+
+    const QString executable = findTool(QStringLiteral("plasma-apply-colorscheme"));
     if (executable.isEmpty()) {
         setMessage(QStringLiteral("plasma-apply-colorscheme não está disponível."), true);
         return;
@@ -420,7 +470,7 @@ void SystemService::setTheme(const QString &theme)
 
     const QString scheme = theme == QStringLiteral("dark") ? QStringLiteral("DreamGrayDarkColor")
                                                               : QStringLiteral("DreamGrayLightColor");
-    runCommands({{executable, {scheme}}}, QStringLiteral("Tema aplicado."),
+    runCommands({{executable, {scheme}, QStringLiteral("tema")}}, QStringLiteral("Tema aplicado."),
                 QStringLiteral("Não foi possível aplicar o tema: "));
 }
 
@@ -432,20 +482,35 @@ void SystemService::setAccent(const QString &accent)
         return;
     }
 
-    const QString executable = QStandardPaths::findExecutable(QStringLiteral("plasma-apply-colorscheme"));
+    const QString executable = findTool(QStringLiteral("plasma-apply-colorscheme"));
     if (executable.isEmpty()) {
         setMessage(QStringLiteral("plasma-apply-colorscheme não está disponível."), true);
         return;
     }
 
-    runCommands({{executable, {QStringLiteral("--accent-color"), normalized}}},
+    runCommands({{executable, {QStringLiteral("--accent-color"), normalized}, QStringLiteral("cor de destaque")}},
                 QStringLiteral("Cor de destaque aplicada."),
-                QStringLiteral("Não foi possível aplicar a cor: "));
+                QStringLiteral("Não foi possível aplicar a cor: "),
+                [this, normalized]() {
+                    // plasma-apply-colorscheme only tints the current scheme. Record the
+                    // choice like System Settings does, so Plasma keeps it when the
+                    // global theme changes and the Welcome shows the exact color.
+                    KConfigGroup general(KSharedConfig::openConfig(QStringLiteral("kdeglobals")), QStringLiteral("General"));
+                    const QColor color(normalized);
+                    general.writeEntry("AccentColor",
+                                       QStringLiteral("%1,%2,%3").arg(color.red()).arg(color.green()).arg(color.blue()),
+                                       KConfig::Notify);
+                    general.sync();
+                    setMessage(QStringLiteral("Cor de destaque aplicada."));
+                    setBusy(false);
+                    readDesktopState();
+                });
 }
 
 void SystemService::setVisualStyle(const QString &style)
 {
-    if (!isAllowedVisualStyle(style)) {
+    const VisualStyleProfile *profile = VisualStyles::find(style);
+    if (profile == nullptr) {
         setMessage(QStringLiteral("Estilo visual inválido."), true);
         return;
     }
@@ -453,75 +518,124 @@ void SystemService::setVisualStyle(const QString &style)
         setMessage(QStringLiteral("Aguarde a operação atual terminar."), true);
         return;
     }
-
-    const QString successMessage = QStringLiteral("Estilo visual aplicado.");
-    if (style == QStringLiteral("solid")) {
-        setBusy(true);
-        setMessage(QStringLiteral("Aplicando alteração…"));
-        applyPanelOpacity(QStringLiteral("opaque"), successMessage);
-        return;
-    }
-
-    const QString kwriteconfig = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
-    if (kwriteconfig.isEmpty()) {
-        setMessage(QStringLiteral("kwriteconfig6 não está disponível."), true);
-        return;
-    }
-    const QString strength = QString::number(style == QStringLiteral("blur") ? kBlurStrength : kGlassStrength);
-    runCommands({{kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-                                 QStringLiteral("Plugins"), QStringLiteral("--key"), QStringLiteral("blurEnabled"),
-                                 QStringLiteral("--type"), QStringLiteral("bool"), QStringLiteral("true")}},
-                 {kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-                                 QStringLiteral("Effect-blur"), QStringLiteral("--key"), QStringLiteral("BlurStrength"),
-                                 strength}}},
-                successMessage, QStringLiteral("Não foi possível aplicar o estilo: "),
-                [this, successMessage]() {
-                    // Load the effect if it was disabled and make it re-read its strength.
-                    QDBusConnection bus = QDBusConnection::sessionBus();
-                    for (const QString &method : {QStringLiteral("loadEffect"), QStringLiteral("reconfigureEffect")}) {
-                        QDBusMessage call = QDBusMessage::createMethodCall(
-                            QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                            QStringLiteral("org.kde.kwin.Effects"), method);
-                        call << QStringLiteral("blur");
-                        bus.asyncCall(call);
-                    }
-                    applyPanelOpacity(QStringLiteral("translucent"), successMessage);
-                });
+    applyStyleProfile(*profile, m_darkTheme, true, QStringLiteral("Estilo %1 aplicado.").arg(profile->name));
 }
 
-void SystemService::applyPanelOpacity(const QString &opacity, const QString &successMessage)
+void SystemService::runTool(const QString &program, const QStringList &arguments,
+                            std::function<void(bool, const QString &)> done)
 {
-    // `opacity` is one of two literals chosen by setVisualStyle; no external text
-    // reaches the script. Plasma 6.6.0–6.7.4 ignores this property on panels shown
-    // on a screen (upstream bug), so the script reports whether it took effect.
-    const QString target = opacity == QStringLiteral("opaque") ? QStringLiteral("opaque")
-                                                               : QStringLiteral("translucent");
-    const QString script = QStringLiteral(
-        "var applied = true;"
-        "panels().forEach(function (panel) {"
-        "  panel.opacity = '%1';"
-        "  if (panel.opacity !== '%1') applied = false;"
-        "});"
-        "print(applied ? 'applied' : 'unchanged');").arg(target);
-    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(plasmaScript(script)), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, target, successMessage](QDBusPendingCallWatcher *call) {
-        const QDBusPendingReply<QString> reply = *call;
-        call->deleteLater();
-        if (reply.isError()) {
-            setMessage(QStringLiteral("Não foi possível alterar os painéis do Plasma: ") + reply.error().message(), true);
-        } else if (reply.value().trimmed() != QStringLiteral("applied")) {
-            const QString manual = QStringLiteral("Esta versão do Plasma não permite mudar a opacidade dos painéis "
-                                                  "automaticamente; ajuste em Editar painel › Opacidade.");
-            if (target == QStringLiteral("opaque")) {
-                setMessage(manual, true);
-            } else {
-                setMessage(QStringLiteral("Desfoque aplicado. ") + manual);
-            }
-        } else {
-            setMessage(successMessage);
+    auto *process = new QProcess(this);
+    process->setStandardInputFile(QProcess::nullDevice());
+    connect(process, &QProcess::finished, this, [process, done](int exitCode, QProcess::ExitStatus status) {
+        const QString errorOutput = QString::fromLocal8Bit(process->readAllStandardError());
+        process->deleteLater();
+        done(status == QProcess::NormalExit && exitCode == 0, errorOutput);
+    });
+    connect(process, &QProcess::errorOccurred, this, [process, done](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            const QString message = process->errorString();
+            process->deleteLater();
+            done(false, message);
         }
-        setBusy(false);
-        readVisualStyle();
+    });
+    process->start(program, arguments);
+}
+
+// Applies the Look-and-Feel package of `profile` (the essential step), then the
+// fallbacks for icon/cursor themes the package names but Mainuan lacks, and the
+// profile's wallpaper. Success is reported only if Plasma's configuration then
+// identifies the requested style.
+void SystemService::applyStyleProfile(const VisualStyleProfile &profile, bool dark, bool withWallpaper,
+                                      const QString &successMessage)
+{
+    const QString lookAndFeelTool = findTool(QStringLiteral("plasma-apply-lookandfeel"));
+    if (lookAndFeelTool.isEmpty()) {
+        setMessage(QStringLiteral("O Plasma deste sistema não oferece plasma-apply-lookandfeel; o estilo não pode ser trocado."), true);
+        return;
+    }
+    const QString package = profile.package(dark);
+    if (!lookAndFeelInstalled(package)) {
+        setMessage(QStringLiteral("O estilo %1 não está instalado neste sistema.").arg(profile.name), true);
+        return;
+    }
+
+    setBusy(true);
+    setMessage(QStringLiteral("Aplicando estilo %1…").arg(profile.name));
+    qCInfo(lcAppearance) << "applying" << profile.name << package;
+
+    // `package` comes from the closed profile table, never from QML.
+    runTool(lookAndFeelTool, {QStringLiteral("--apply"), package},
+            [this, profile, dark, withWallpaper, successMessage](bool ok, const QString &errorOutput) {
+        if (!ok) {
+            qCWarning(lcAppearance) << "plasma-apply-lookandfeel failed:" << errorOutput.trimmed();
+            const QString detail = lastLine(errorOutput);
+            setMessage(QStringLiteral("Não foi possível aplicar o estilo %1.").arg(profile.name)
+                           + (detail.isEmpty() ? QString() : QStringLiteral(" (") + detail + QLatin1Char(')')),
+                       true);
+            readDesktopState();
+            readVisualStyle();
+            setBusy(false);
+            return;
+        }
+
+        QList<Command> followUps;
+        const QString icons = KConfigGroup(freshConfig(QStringLiteral("kdeglobals")), QStringLiteral("Icons"))
+                                  .readEntry("Theme", QString());
+        const QString fallbackIcons = dark ? profile.fallbackDarkIcons : profile.fallbackLightIcons;
+        if (!icons.isEmpty() && !iconThemeInstalled(icons) && iconThemeInstalled(fallbackIcons)) {
+            followUps.append({findTool(QStringLiteral("plasma-changeicons")), {fallbackIcons}, QStringLiteral("ícones")});
+        }
+        const QString cursor = KConfigGroup(freshConfig(QStringLiteral("kcminputrc")), QStringLiteral("Mouse"))
+                                   .readEntry("cursorTheme", QString());
+        if (!cursor.isEmpty() && !cursorThemeInstalled(cursor) && cursorThemeInstalled(profile.fallbackCursor)) {
+            followUps.append({findTool(QStringLiteral("plasma-apply-cursortheme")), {profile.fallbackCursor},
+                              QStringLiteral("cursor")});
+        }
+        if (withWallpaper) {
+            const QString wallpaper = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                             QStringLiteral("wallpapers/") + profile.wallpaper);
+            followUps.append({wallpaper.isEmpty() ? QString() : findTool(QStringLiteral("plasma-apply-wallpaperimage")),
+                              {wallpaper}, QStringLiteral("papel de parede")});
+        }
+
+        runStyleFollowUps(followUps, {}, [this, profile, successMessage](const QStringList &failures) {
+            readDesktopState();
+            readVisualStyle();
+            if (m_visualStyle != profile.id) {
+                qCWarning(lcAppearance) << "style not confirmed after applying" << profile.name;
+                setMessage(QStringLiteral("O Plasma não confirmou o estilo %1.").arg(profile.name), true);
+            } else if (!failures.isEmpty()) {
+                setMessage(successMessage + QStringLiteral(" Não foi possível ajustar: ")
+                               + failures.join(QStringLiteral(", ")) + QLatin1Char('.'),
+                           true);
+            } else {
+                setMessage(successMessage);
+            }
+            setBusy(false);
+        });
+    });
+}
+
+void SystemService::runStyleFollowUps(QList<Command> steps, QStringList failures,
+                                      std::function<void(const QStringList &)> done)
+{
+    if (steps.isEmpty()) {
+        done(failures);
+        return;
+    }
+    const Command step = steps.takeFirst();
+    if (step.program.isEmpty()) {
+        qCWarning(lcAppearance) << "no tool or file for" << step.label;
+        runStyleFollowUps(steps, failures << step.label, done);
+        return;
+    }
+    runTool(step.program, step.arguments,
+            [this, steps, failures, step, done](bool ok, const QString &errorOutput) mutable {
+        if (!ok) {
+            qCWarning(lcAppearance) << step.program << "failed:" << errorOutput.trimmed();
+            failures << step.label;
+        }
+        runStyleFollowUps(steps, failures, done);
     });
 }
 
@@ -582,14 +696,4 @@ bool SystemService::copyText(const QString &text)
     QGuiApplication::clipboard()->setText(text);
     setMessage(QStringLiteral("Chave Pix copiada."));
     return true;
-}
-
-void SystemService::updateConfigWatcher()
-{
-    if (m_configWatcher.files().contains(m_configPath)) {
-        return;
-    }
-    if (QFileInfo::exists(m_configPath)) {
-        m_configWatcher.addPath(m_configPath);
-    }
 }
