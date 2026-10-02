@@ -1,0 +1,161 @@
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+Kirigami.ApplicationWindow {
+    id: root
+    visible: false
+    width: 1180
+    height: 760
+    minimumWidth: 900
+    minimumHeight: 620
+    title: "Mainuan — Bem-vindo"
+    property bool dark: systemService.darkTheme
+    property color accent: systemService.accentColor.length > 0 ? systemService.accentColor : "#3daee9"
+    // Kirigami supplies the controls and icon theme; these explicit surfaces keep
+    // contrast stable on Plasma sessions whose QPA palette is not synchronized.
+    property color pageColor: dark ? "#1b1f26" : "#f2f4f7"
+    property color surfaceColor: dark ? "#242a33" : "#ffffff"
+    property color elevatedColor: dark ? "#2d3440" : "#f7f8fa"
+    property color borderColor: dark ? "#3d4653" : "#d6dbe3"
+    property color textColor: dark ? "#f1f4f8" : "#20252d"
+    property color mutedColor: dark ? "#aeb8c8" : "#657080"
+    property color successColor: dark ? "#7fdda5" : "#258b4b"
+    property color warningColor: dark ? "#f2c46d" : "#94600b"
+    property color errorColor: dark ? "#ff8f87" : "#c0392b"
+    property int currentPage: 0
+    property bool sidebarCollapsed: root.width < 1060
+
+    background: Rectangle { color: root.pageColor }
+
+    // A privileged installation cannot be interrupted safely: keep the window
+    // open and show the dialog explaining why.
+    onClosing: (close) => {
+        if (installService.busy) {
+            close.accepted = false;
+            if (!installDialog.opened)
+                installDialog.openFor(installService.profileId);
+            installDialog.requestClose();
+        }
+    }
+
+    function openInstallDialog(profileId) {
+        installDialog.openFor(profileId);
+    }
+
+    Connections {
+        target: installService
+        function onLaunchFailed(message) { root.showPassiveNotification(message) }
+    }
+
+    InstallDialog {
+        id: installDialog
+        installer: installService
+        dark: root.dark
+        accent: root.accent
+        surfaceColor: root.surfaceColor
+        elevatedColor: root.elevatedColor
+        borderColor: root.borderColor
+        textColor: root.textColor
+        mutedColor: root.mutedColor
+        successColor: root.successColor
+        errorColor: root.errorColor
+    }
+
+    ListModel {
+        id: navigationModel
+        ListElement { label: "Início"; iconName: "go-home" }
+        ListElement { label: "Aparência"; iconName: "preferences-desktop-theme" }
+        ListElement { label: "Office"; iconName: "office-address-book" }
+        ListElement { label: "Navegadores"; iconName: "internet-web-browser" }
+        ListElement { label: "Tutoriais"; iconName: "media-playback-start" }
+        ListElement { label: "Sobre"; iconName: "help-about" }
+        ListElement { label: "Contribuir"; iconName: "love" }
+    }
+
+    RowLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        Rectangle {
+            Layout.fillHeight: true
+            Layout.preferredWidth: root.sidebarCollapsed ? 76 : 232
+            color: dark ? "#20252d" : "#e7ebf1"
+            border.color: root.borderColor
+            border.width: 1
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 10
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 10
+                    Controls.Label { Layout.fillWidth: true; text: root.sidebarCollapsed ? "M" : "MAINUAN"; color: root.accent; font.pixelSize: root.sidebarCollapsed ? 22 : 16; font.weight: Font.Black; horizontalAlignment: root.sidebarCollapsed ? Text.AlignHCenter : Text.AlignLeft }
+                }
+                ListView {
+                    id: navigation
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: navigationModel
+                    spacing: 4
+                    interactive: false
+                    delegate: SidebarButton {
+                        width: navigation.width
+                        collapsed: root.sidebarCollapsed
+                        dark: root.dark
+                        accent: root.accent
+                        mutedColor: root.mutedColor
+                        textColor: root.textColor
+                        label: model.label
+                        iconName: model.iconName
+                        selected: root.currentPage === index
+                        onClicked: root.currentPage = index
+                    }
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: root.sidebarCollapsed ? "" : "Plasma " + (systemService.plasmaVersion.length > 0 ? systemService.plasmaVersion.replace("plasmashell ", "") : "6")
+                    color: root.mutedColor
+                    font.pixelSize: 10
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                }
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+            Rectangle {
+                Layout.fillWidth: true
+                height: 58
+                color: root.pageColor
+                border.color: root.borderColor
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    Controls.Label { text: navigationModel.get(root.currentPage).label; color: root.textColor; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Item { Layout.fillWidth: true }
+                    Controls.Label { text: systemService.sessionType === "wayland" ? "Wayland" : systemService.sessionType; color: root.mutedColor; font.pixelSize: 11 }
+                }
+            }
+            StackLayout {
+                id: pages
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: root.currentPage
+                HomePage { system: systemService; installer: installService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor; warningColor: root.warningColor; onInstallRequested: (profileId) => root.openInstallDialog(profileId) }
+                AppearancePage { system: systemService; layouts: layoutModel; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
+                AppsPage { appModel: officeModel; pkgService: packageService; installer: installService; system: systemService; onInstallRequested: (profileId) => root.openInstallDialog(profileId); pageTitle: "Office"; pageDescription: "Instale ferramentas de produtividade ou abra serviços online."; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
+                AppsPage { appModel: browserModel; pkgService: packageService; installer: installService; system: systemService; onInstallRequested: (profileId) => root.openInstallDialog(profileId); pageTitle: "Navegadores"; pageDescription: "Escolha seu navegador preferido para navegar na web."; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
+                TutorialsPage { tutorialModel: videoModel; hostWindow: root; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
+                AboutPage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
+                ContributePage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
+            }
+        }
+    }
+}

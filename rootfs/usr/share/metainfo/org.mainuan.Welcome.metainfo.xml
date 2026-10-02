@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.mainuan.Welcome</id>
+  <name>Mainuan Welcome</name>
+  <name xml:lang="pt-BR">Boas-vindas do Mainuan</name>
+  <summary>Configure o Mainuan e conheça os recursos do seu desktop</summary>
+  <summary xml:lang="pt-BR">Configure o Mainuan e conheça os recursos do seu desktop</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <content_rating type="oars-1.1"/>
+  <launchable type="desktop-id">mainuan-welcome.desktop</launchable>
+  <url type="homepage">https://github.com/ruscher/welcome5</url>
+  <url type="bugtracker">https://github.com/ruscher/welcome5/issues</url>
+  <provides>
+    <binary>mainuan-welcome</binary>
+  </provides>
+</component>
