@@ -70,13 +70,13 @@ Kirigami.ApplicationWindow {
 
     ListModel {
         id: navigationModel
-        ListElement { label: "Início"; iconName: "go-home" }
-        ListElement { label: "Aparência"; iconName: "preferences-desktop-theme" }
-        ListElement { label: "Office"; iconName: "office-address-book" }
-        ListElement { label: "Navegadores"; iconName: "internet-web-browser" }
-        ListElement { label: "Tutoriais"; iconName: "media-playback-start" }
-        ListElement { label: "Sobre"; iconName: "help-about" }
-        ListElement { label: "Contribuir"; iconName: "love" }
+        ListElement { label: "Início"; iconName: "house" }
+        ListElement { label: "Aparência"; iconName: "palette" }
+        ListElement { label: "Office"; iconName: "briefcase" }
+        ListElement { label: "Navegadores"; iconName: "globe" }
+        ListElement { label: "Tutoriais"; iconName: "circle-play" }
+        ListElement { label: "Sobre"; iconName: "info" }
+        ListElement { label: "Contribuir"; iconName: "heart" }
     }
 
     RowLayout {

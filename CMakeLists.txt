@@ -88,6 +88,7 @@ qt_add_qml_module(mainuan-welcome
         qml/components/StatusRow.qml
         qml/components/SidebarButton.qml
         qml/components/SettingRow.qml
+        qml/components/PageContainer.qml
         qml/components/SegmentedChoice.qml
         qml/components/MessageBanner.qml
         qml/components/InstallDialog.qml
@@ -125,6 +126,17 @@ endforeach()
 qt_add_resources(mainuan-welcome welcome_assets
     PREFIX "/assets"
     FILES ${MAINUAN_ASSETS}
+)
+
+# Line icons used across the interface (Lucide, ISC; see qml/icons/LICENSE.lucide).
+file(GLOB MAINUAN_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/qml/icons/*.svg")
+foreach(icon IN LISTS MAINUAN_ICONS)
+    get_filename_component(icon_name "${icon}" NAME)
+    set_source_files_properties("${icon}" PROPERTIES QT_RESOURCE_ALIAS "${icon_name}")
+endforeach()
+qt_add_resources(mainuan-welcome welcome_icons
+    PREFIX "/icons"
+    FILES ${MAINUAN_ICONS}
 )
 
 target_link_libraries(mainuan-welcome PRIVATE

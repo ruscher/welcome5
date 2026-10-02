@@ -72,88 +72,80 @@ Kirigami.Page {
         Accessible.role: Accessible.Heading
     }
 
-    Controls.ScrollView {
-        anchors.fill: parent
-        clip: true
+    PageContainer {
+        contentSpacing: 12
 
-        ColumnLayout {
-            width: Math.min(page.width - 48, 880)
-            x: Math.max(24, (page.width - width) / 2)
-            y: 24
-            spacing: 12
+        Kirigami.Heading {
+            Layout.fillWidth: true
+            text: "Bem-vindo ao <font color='" + page.accent + "'>Mainuan</font>"
+            level: 1
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            text: "Configure seu sistema à sua maneira, com ferramentas nativas do Plasma."
+            color: page.mutedColor
+            wrapMode: Text.WordWrap
+        }
 
-            Kirigami.Heading {
-                Layout.fillWidth: true
-                text: "Bem-vindo ao <font color='" + page.accent + "'>Mainuan</font>"
-                level: 1
-            }
-            Controls.Label {
-                Layout.fillWidth: true
-                text: "Configure seu sistema à sua maneira, com ferramentas nativas do Plasma."
-                color: page.mutedColor
-                wrapMode: Text.WordWrap
-            }
+        MessageBanner {
+            Layout.fillWidth: true
+            text: page.system.lastMessage
+            dark: page.dark
+            accent: page.accent
+            textColor: page.textColor
+        }
 
-            MessageBanner {
-                Layout.fillWidth: true
-                text: page.system.lastMessage
-                dark: page.dark
-                accent: page.accent
-                textColor: page.textColor
-            }
+        SectionLabel { text: "Hardware & Mídia"; color: page.mutedColor }
 
-            SectionLabel { text: "Hardware & Mídia"; color: page.mutedColor }
+        StatusRow {
+            Layout.fillWidth: true
+            surfaceColor: page.surfaceColor; borderColor: page.borderColor; accent: page.accent
+            textColor: page.textColor; mutedColor: page.mutedColor
+            successColor: page.successColor; warningColor: page.warningColor
+            title: "Drivers adicionais"
+            description: "Gerencie drivers proprietários de vídeo, Wi-Fi e outros dispositivos."
+            iconName: "computer"
+            statusText: page.system.driversAvailable ? "" : "Gerenciador indisponível"
+            primaryText: "Gerenciar"
+            primaryIcon: "configure"
+            primaryHighlighted: false
+            primaryEnabled: page.system.driversAvailable
+            onPrimaryClicked: page.system.performAction("drivers")
+        }
+        ProfileRow {
+            host: page
+            profileId: "codecs"
+            title: "Codecs de mídia"
+            description: "Reproduza áudio e vídeo nos formatos mais comuns."
+            iconName: "applications-multimedia"
+        }
 
-            StatusRow {
-                Layout.fillWidth: true
-                surfaceColor: page.surfaceColor; borderColor: page.borderColor; accent: page.accent
-                textColor: page.textColor; mutedColor: page.mutedColor
-                successColor: page.successColor; warningColor: page.warningColor
-                title: "Drivers adicionais"
-                description: "Gerencie drivers proprietários de vídeo, Wi-Fi e outros dispositivos."
-                iconName: "computer"
-                statusText: page.system.driversAvailable ? "" : "Gerenciador indisponível"
-                primaryText: "Gerenciar"
-                primaryIcon: "configure"
-                primaryHighlighted: false
-                primaryEnabled: page.system.driversAvailable
-                onPrimaryClicked: page.system.performAction("drivers")
-            }
-            ProfileRow {
-                host: page
-                profileId: "codecs"
-                title: "Codecs de mídia"
-                description: "Reproduza áudio e vídeo nos formatos mais comuns."
-                iconName: "applications-multimedia"
-            }
+        SectionLabel { text: "Segurança & Privacidade"; color: page.mutedColor }
 
-            SectionLabel { text: "Segurança & Privacidade"; color: page.mutedColor }
+        ProfileRow {
+            host: page
+            profileId: "antivirus"
+            title: "Antivírus"
+            description: "Proteção ClamAV com a interface gráfica ClamUI."
+            iconName: "security-high"
+            configureText: "Configurar"
+        }
+        ProfileRow {
+            host: page
+            profileId: "firewall"
+            title: "Firewall"
+            description: "Controle as conexões de rede com o UFW e o módulo do KDE Plasma."
+            iconName: "security-medium"
+            configureText: "Configurar"
+            installedNote: page.system.firewallStatus
+        }
 
-            ProfileRow {
-                host: page
-                profileId: "antivirus"
-                title: "Antivírus"
-                description: "Proteção ClamAV com a interface gráfica ClamUI."
-                iconName: "security-high"
-                configureText: "Configurar"
-            }
-            ProfileRow {
-                host: page
-                profileId: "firewall"
-                title: "Firewall"
-                description: "Controle as conexões de rede com o UFW e o módulo do KDE Plasma."
-                iconName: "security-medium"
-                configureText: "Configurar"
-                installedNote: page.system.firewallStatus
-            }
-
-            Controls.Label {
-                Layout.topMargin: 4
-                Layout.bottomMargin: 20
-                text: "Sessão: " + page.system.sessionType + (page.system.plasmaVersion.length > 0 ? "  ·  " + page.system.plasmaVersion : "")
-                color: page.mutedColor
-                font.pixelSize: 11
-            }
+        Controls.Label {
+            Layout.topMargin: 4
+            Layout.bottomMargin: 20
+            text: "Sessão: " + page.system.sessionType + (page.system.plasmaVersion.length > 0 ? "  ·  " + page.system.plasmaVersion : "")
+            color: page.mutedColor
+            font.pixelSize: 11
         }
     }
 }

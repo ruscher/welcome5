@@ -14,14 +14,15 @@ Controls.Button {
     property color mutedColor: "#697286"
     property color textColor: "#202532"
 
-    implicitHeight: 44
+    // Line icons from qml/icons, drawn as a mask in the text/accent color so the
+    // navigation looks the same with any icon theme.
+    readonly property int iconSize: collapsed ? 28 : 26
+
+    implicitHeight: 48
     implicitWidth: collapsed ? 58 : 210
     text: collapsed ? "" : label
     display: collapsed ? Controls.AbstractButton.IconOnly : Controls.AbstractButton.TextBesideIcon
-    icon.name: iconName
-    icon.width: 20
-    icon.height: 20
-    leftPadding: collapsed ? 18 : 16
+    leftPadding: collapsed ? (width - iconSize) / 2 : 14
     rightPadding: collapsed ? 18 : 12
     Accessible.name: label
     Controls.ToolTip.visible: collapsed && hovered
@@ -31,12 +32,13 @@ Controls.Button {
         radius: 10
         color: control.selected ? Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.20 : 0.12)
                                 : (control.hovered ? Qt.rgba(1, 1, 1, dark ? 0.07 : 0.50) : "transparent")
-        border.color: control.selected ? Qt.rgba(accent.r, accent.g, accent.b, 0.45) : "transparent"
-        border.width: control.selected ? 1 : 0
+        border.color: control.visualFocus ? accent
+                    : (control.selected ? Qt.rgba(accent.r, accent.g, accent.b, 0.45) : "transparent")
+        border.width: control.visualFocus ? 2 : (control.selected ? 1 : 0)
     }
 
     contentItem: Row {
-        spacing: 11
+        spacing: 12
         anchors.fill: parent
         anchors.leftMargin: control.leftPadding
         anchors.rightMargin: control.rightPadding
@@ -45,16 +47,19 @@ Controls.Button {
         layoutDirection: Qt.LeftToRight
 
         Kirigami.Icon {
-            width: 20
-            height: 20
+            width: control.iconSize
+            height: control.iconSize
             anchors.verticalCenter: parent.verticalCenter
-            source: control.iconName
-            color: control.selected ? accent : mutedColor
+            source: "qrc:/icons/" + control.iconName + ".svg"
+            isMask: true
+            color: control.selected ? accent : (control.hovered || control.visualFocus ? textColor : mutedColor)
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Accessible.ignored: true
         }
 
         Controls.Label {
             visible: !control.collapsed
-            width: parent.width - 31
+            width: parent.width - control.iconSize - 12
             anchors.verticalCenter: parent.verticalCenter
             text: control.label
             color: control.selected ? accent : textColor
