@@ -26,7 +26,7 @@ Decisão: implementar na aplicação Qt, que é a que roda. Ressuscitar o Electr
 2. `runCommand` espera o `kcmshell6` terminar: com o módulo de firewall aberto, os botões de tema e cor ficam desabilitados.
 3. Não há indicação de progresso nas instalações, nem tratamento de cancelamento/erros além do texto de saída.
 4. Antivírus e codecs dependem do Discover, que não existe em todas as instalações.
-5. “Estilo visual” existia só na interface do protótipo, sem backend.
+5. “Estilo visual” existia só na interface do protótipo, sem backend; o `change-theme.sh` do Mainuan era a referência de comportamento.
 
 ## Decisões
 
@@ -38,15 +38,15 @@ Decisão: implementar na aplicação Qt, que é a que roda. Ressuscitar o Electr
 
 ### Estilo visual
 
-Implementado com APIs estáveis do Plasma 6, em escopo de usuário e reversível:
+Cada opção aplica um tema global (pacote Look-and-Feel) do Mainuan, na variante clara ou escura conforme o “Tema do sistema”:
 
-| Estilo | Painéis (`panel.opacity`, scripting do Plasma) | Blur do KWin |
-|---|---|---|
-| Desfocado | `translucent` | ativo, intensidade 10 |
-| Vítreo | `translucent` | ativo, intensidade 3 |
-| Sólido | `opaque` | não alterado |
+| Opção | Perfil | Pacote claro / escuro | Papel de parede |
+|---|---|---|---|
+| Desfocado | Dream | `Dream-Light-Color-Global-6` / `Dream-Dark-Color-Global-6` | `01ciano.png` |
+| Vítreo | Tahoe | `com.github.vinceliuice.MacTahoe-Light` / `-Dark` | `01ciano.png` |
+| Sólido | Breeze | `org.kde.breeze.desktop` / `org.kde.breezedark.desktop` | `02cinza.png` |
 
-Leitura: `kwinrc` (`[Plugins] blurEnabled`, `[Effect-blur] BlurStrength`) e `panels().map(p => p.opacity)` via `org.kde.PlasmaShell.evaluateScript`. Escrita: `kwriteconfig6` com argumentos separados, recarga do efeito via DBus `org.kde.KWin /Effects` e o script fixo do Plasma (sem interpolação de dados externos).
+A primeira versão desta tela tentou representar os estilos com intensidade do blur do KWin e opacidade dos painéis; no Mainuan isso não produzia os visuais Dream/Tahoe/Breeze e foi substituído (correção registrada em `appearance-and-installer-validation.md`).
 
 ### Instalador universal
 

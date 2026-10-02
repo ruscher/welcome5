@@ -13,7 +13,7 @@
 |---|---|---|
 | Qt Quick Controls 2 | botões, sliders, scroll | Qt 6.5+ |
 | Kirigami ApplicationWindow/Page/Icon | integração visual | módulo fornecido pelo KDE; sem API específica do Plasma |
-| QSettings + kdeglobals | leitura de tema/accent | formato existente, fallback seguro |
+| KConfig + kdeglobals/plasmarc | leitura de tema, accent e estilo visual (inclui `~/.config/kdedefaults`) | API estável do KF6 |
 | `plasma-apply-colorscheme` | aplicação solicitada pelo usuário | executável externo validado e assíncrono |
 | QProcess | processos opcionais | contrato Qt estável |
 | QDesktopServices | links | API Qt, sem shell |

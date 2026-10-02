@@ -14,7 +14,7 @@ Aplicação nativa de boas-vindas do Mainuan para KDE Plasma. A interface é Qt 
 
 ## Dependências
 
-Build: CMake 3.24+, compilador C++17 e Qt 6.5+ (`Core`, `Gui`, `Qml`, `Quick`, `QuickControls2`, `Network`, `DBus`, `Multimedia`, `Test`).
+Build: CMake 3.24+, compilador C++17, Qt 6.5+ (`Core`, `Gui`, `Qml`, `Quick`, `QuickControls2`, `Network`, `DBus`, `Multimedia`, `Test`) e KF6 Config. No Mainuan/Ubuntu, as dependências exatas estão em `debian/control`.
 
 Runtime: Qt 6, Qt Quick Controls 2 e Kirigami 6 disponível no sistema KDE, `pkexec` (polkit) e um agente de autenticação. A instalação de antivírus, firewall e codecs usa APT e, portanto, requer Debian/Ubuntu; em outros sistemas ela aparece como indisponível. Flatpak, UFW, `kcmshell6` e o gerenciador de drivers são opcionais; a ausência deles é tratada na interface.
 
@@ -34,6 +34,34 @@ cmake --install build --prefix "$PWD/stage"
 ```
 
 O pacote instala o binário em `bin/`, o helper em `libexec/mainuan-welcome/`, a ação polkit em `share/polkit-1/actions/` (com o caminho do helper gerado pelo CMake), o desktop file em `share/applications/` e os metadados AppStream em `share/metainfo/`. Os assets são embutidos no recurso Qt para a interface funcionar offline.
+
+## Pacote para o Mainuan
+
+```bash
+sudo apt-get install devscripts equivs
+sudo mk-build-deps -i -r debian/control
+dpkg-buildpackage -us -uc -b
+sudo apt-get install ../mainuan-welcome_*_amd64.deb
+```
+
+O pacote instala também `/etc/xdg/autostart/org.mainuan.Welcome.desktop`, que abre o Welcome ao entrar na sessão; cada usuário pode desativar isso pela opção “Mostrar esta tela ao iniciar o sistema”.
+
+## Aparência
+
+“Estilo visual” aplica um tema global completo do Mainuan:
+
+| Opção | Tema | Pacote Look-and-Feel (claro / escuro) | Papel de parede |
+|---|---|---|---|
+| Desfocado | Dream | `Dream-Light-Color-Global-6` / `Dream-Dark-Color-Global-6` | `01ciano.png` |
+| Vítreo | Tahoe | `com.github.vinceliuice.MacTahoe-Light` / `-Dark` | `01ciano.png` |
+| Sólido | Breeze | `org.kde.breeze.desktop` / `org.kde.breezedark.desktop` | `02cinza.png` |
+
+- **Aplicação:** `plasma-apply-lookandfeel --apply <pacote>` (esquema de cores, tema Plasma, decoração, ícones, cursor), depois `plasma-apply-wallpaperimage`. Se o pacote citar ícones ou cursor que não estão instalados (caso do Tahoe), o Welcome usa os do Breeze via `plasma-changeicons`/`plasma-apply-cursortheme`. Tudo roda como o próprio usuário, sem root e sem reiniciar o Plasma.
+- **Detecção:** `[KDE] LookAndFeelPackage` em `kdeglobals` e, quando ausente, `[Theme] name` em `plasmarc`, ambos lidos com KConfig pela cascata do KDE (os temas globais gravam em `~/.config/kdedefaults/`). Mudanças feitas fora do Welcome aparecem na hora (`KConfigWatcher`).
+- **Tema do sistema** alterna a variante clara/escura do estilo atual; **Cor de destaque** usa `plasma-apply-colorscheme --accent-color` e grava `AccentColor`, que o Plasma mantém ao trocar de estilo.
+- Os ids e arquivos são uma lista fechada em `src/services/VisualStyle.cpp`; o QML só envia `blur`, `glass` ou `solid`.
+
+Diagnóstico: `journalctl --user --since today | grep mainuan.welcome` mostra cada estilo aplicado e detectado, e `kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage` dentro da sessão Plasma.
 
 ## Instalador
 

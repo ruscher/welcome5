@@ -21,7 +21,7 @@ O script foi removido do runtime. Não restou shell necessário para a aplicaç�
 
 - `QProcess` com programa e lista de argumentos, nunca `system()`, `popen()`, `bash -c` ou concatenação de comando;
 - `QDesktopServices::openUrl` para URLs `http`, `https` e `tg` validadas;
-- `QSettings`/watcher para o estado local de `kdeglobals`;
+- KConfig (`KSharedConfig` + `KConfigWatcher`) para ler `kdeglobals`/`plasmarc` pela cascata do KDE e acompanhar mudanças;
 - `QFileSystemWatcher` para reagir a alteração de tema sem polling agressivo;
 - `QLocalServer`/`QLocalSocket` para single-instance;
 - `QtMultimedia` para vídeos locais;
