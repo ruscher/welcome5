@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(mainuan-welcome VERSION 2.1.0 LANGUAGES CXX)
+project(mainuan-welcome VERSION 2.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -53,6 +53,8 @@ add_library(mainuan-core STATIC
     src/services/SingleInstance.cpp
     src/services/SingleInstance.h
     src/services/LayoutService.cpp
+    src/services/PlasmaInfo.cpp
+    src/services/PlasmaInfo.h
     src/services/LayoutService.h
     src/services/SystemReportService.cpp
     src/services/SystemReportService.h
@@ -198,16 +200,27 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
 )
 
+# Configuration directory: /etc for the /usr prefix (as GNUInstallDirs does)
+# or an absolute CMAKE_INSTALL_SYSCONFDIR (Debian passes /etc); otherwise
+# relative, so `cmake --install --prefix <stage>` stays inside the stage.
+if(IS_ABSOLUTE "${CMAKE_INSTALL_SYSCONFDIR}")
+    set(MAINUAN_SYSCONFDIR "${CMAKE_INSTALL_SYSCONFDIR}")
+elseif(CMAKE_INSTALL_PREFIX STREQUAL "/usr")
+    set(MAINUAN_SYSCONFDIR "/etc")
+else()
+    set(MAINUAN_SYSCONFDIR "${CMAKE_INSTALL_SYSCONFDIR}")
+endif()
+
 # System-wide login entry; each user can hide it from the Welcome itself
-# (Hidden=true in $XDG_CONFIG_HOME/autostart). With prefix /usr this is /etc.
+# (Hidden=true in $XDG_CONFIG_HOME/autostart).
 install(FILES
     rootfs/etc/xdg/autostart/org.mainuan.Welcome.desktop
-    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart
+    DESTINATION ${MAINUAN_SYSCONFDIR}/xdg/autostart
 )
 
 install(FILES
     rootfs/etc/mainuan/welcome.conf
-    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/mainuan
+    DESTINATION ${MAINUAN_SYSCONFDIR}/mainuan
 )
 
 install(FILES

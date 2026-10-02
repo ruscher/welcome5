@@ -53,7 +53,7 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Seção | Fontes |
 |---|---|
 | Sistema | `/etc/os-release`, `/var/log/installer/media-info`, `QSysInfo`, `QLocale`, data e hora |
-| Área de trabalho | `plasmashell --version`, `dpkg-query` (`libkf6coreaddons6`), `qVersion()`, `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP` |
+| Área de trabalho | versão do Plasma via D-Bus (`org.kde.plasmashell /MainApplication applicationVersion`), `dpkg-query` (`libkf6coreaddons6`), `qVersion()`, `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP` |
 | Hardware | `/sys/class/dmi/id/{sys_vendor,product_name}`, `/proc/cpuinfo`, `/sys/firmware/efi` (UEFI e Secure Boot via efivars) |
 | Gráficos | `/sys/class/drm/card*/device` + driver, `lspci -mm` para os nomes, `glxinfo -B` (renderizador OpenGL), `QScreen` (resolução, taxa, escala) |
 | Memória | `/proc/meminfo` (RAM e swap) |
@@ -95,6 +95,8 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Revisão: `systemctl` sem tratamento de falha ao iniciar nem tempo-limite podia deixar o Welcome “ocupado” | auxiliar único com `errorOccurred` e tempo-limite de 60 s |
 | Revisão: disponibilidade do Plasma lida só na abertura | relida sempre que a Aparência aparece |
 | Revisão: o teste de fumaça usava o barramento D-Bus da sessão real | roda sem barramento nem display (um barramento privado com `dbus-run-session` deixava portais ativados rodando após o build) |
+| Após o merge: `plasmashell --version` (versão do Plasma) iniciava um segundo `plasmashell`, que quebrava (SIGSEGV + core dump) quando herdava a plataforma offscreen dos testes em cada `ctest`/build do pacote | versão lida do D-Bus (`/MainApplication applicationVersion`), sem processo |
+| Após o merge: `cmake --install build --prefix stage` tentava gravar em `/usr/local/etc` | destino de `/etc` relativo ao prefixo (absoluto só com prefixo `/usr` ou `CMAKE_INSTALL_SYSCONFDIR` absoluto) |
 
 ## Testes executados
 

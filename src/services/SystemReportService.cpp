@@ -1,5 +1,7 @@
 #include "SystemReportService.h"
 
+#include "PlasmaInfo.h"
+
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
@@ -244,7 +246,15 @@ void SystemReportService::refresh()
     emit busyChanged();
     m_toolOutput.clear();
     m_pendingTools = 1; // released after every tool has been started
-    runTool(QStringLiteral("plasma"), QStringLiteral("plasmashell"), {QStringLiteral("--version")});
+    if (m_root.isEmpty()) {
+        ++m_pendingTools;
+        PlasmaInfo::queryVersion(this, [this](const QString &version) {
+            if (!version.isEmpty()) {
+                m_toolOutput.insert(QStringLiteral("plasma"), version);
+            }
+            toolFinished();
+        });
+    }
     runTool(QStringLiteral("lspci"), QStringLiteral("lspci"), {QStringLiteral("-mm")});
     runTool(QStringLiteral("lsblk"), QStringLiteral("lsblk"),
             {QStringLiteral("-J"), QStringLiteral("-b"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,SIZE,MODEL,ROTA,TRAN")});
@@ -304,7 +314,7 @@ void SystemReportService::build()
     m_generatedAt = QDateTime::currentDateTime();
     const QHash<QString, QString> os = parseOsRelease(readFile(QStringLiteral("/etc/os-release")));
     const QString osName = os.value(QStringLiteral("PRETTY_NAME"), os.value(QStringLiteral("NAME"), QSysInfo::prettyProductName()));
-    const QString plasma = firstLine(m_toolOutput.value(QStringLiteral("plasma"))).remove(QStringLiteral("plasmashell")).trimmed();
+    const QString plasma = m_toolOutput.value(QStringLiteral("plasma"));
     const QString frameworks = m_toolOutput.value(QStringLiteral("frameworks")).section(QLatin1Char('-'), 0, 0).trimmed();
     const Cpu cpu = parseCpuInfo(readFile(QStringLiteral("/proc/cpuinfo")));
     const Memory memory = parseMemInfo(readFile(QStringLiteral("/proc/meminfo")));
