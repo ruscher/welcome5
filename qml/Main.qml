@@ -175,9 +175,14 @@ Kirigami.ApplicationWindow {
                         id: startupCheck
                         text: "Mostrar esta tela ao iniciar o sistema"
                         checked: startupPreference.showAtStartup
-                        onToggled: {
+                        // onToggled is not emitted for accessibility actions (screen readers),
+                        // so react to every user change of `checked`.
+                        onCheckedChanged: {
+                            if (checked === startupPreference.showAtStartup)
+                                return;
                             startupPreference.showAtStartup = checked;
-                            // Toggling replaces the binding; keep following the real preference.
+                            // A toggle replaces the binding; follow the stored preference again,
+                            // which also reverts the box if saving failed.
                             checked = Qt.binding(() => startupPreference.showAtStartup);
                         }
                         Accessible.description: "Abre esta tela automaticamente quando você entra na sua sessão"

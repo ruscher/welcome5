@@ -564,18 +564,23 @@ void MainuanTest::disablesAptProfilesOnNonDebianSystems()
     QVERIFY(waitForDetection(installer));
     QVERIFY(!installer.aptSupported());
 
-    // Without dpkg the state comes from files on this host, so only profiles
-    // that are not complete here must explain why they cannot be installed.
-    for (const QString &profile : {QStringLiteral("antivirus"), QStringLiteral("firewall"), QStringLiteral("codecs")}) {
-        const QVariantMap state = stateOf(installer, profile);
-        QVERIFY(!state.value(QStringLiteral("canInstall")).toBool());
-        if (state.value(QStringLiteral("state")) == QStringLiteral("installed")) {
-            continue;
-        }
-        QVERIFY(!state.value(QStringLiteral("unavailableReason")).toString().isEmpty());
-        QVERIFY(runToEnd(installer, profile));
+    // Without dpkg the state comes from files on this host. Codecs are APT only:
+    // unless the host already has them, they must be reported as unavailable.
+    const QVariantMap codecs = stateOf(installer, QStringLiteral("codecs"));
+    if (codecs.value(QStringLiteral("state")) != QStringLiteral("installed")) {
+        QVERIFY(!codecs.value(QStringLiteral("canInstall")).toBool());
+        QVERIFY(!codecs.value(QStringLiteral("unavailableReason")).toString().isEmpty());
+        QVERIFY(runToEnd(installer, QStringLiteral("codecs")));
         QCOMPARE(installer.phase(), QStringLiteral("error"));
         QVERIFY(installer.resultMessage().contains(QStringLiteral("Debian ou Ubuntu")));
+    }
+    // Any profile that cannot be installed explains why; Flatpak-only gaps stay installable.
+    for (const QString &profile : {QStringLiteral("antivirus"), QStringLiteral("firewall"), QStringLiteral("codecs")}) {
+        const QVariantMap state = stateOf(installer, profile);
+        if (state.value(QStringLiteral("state")) != QStringLiteral("installed")
+            && !state.value(QStringLiteral("canInstall")).toBool()) {
+            QVERIFY(!state.value(QStringLiteral("unavailableReason")).toString().isEmpty());
+        }
     }
 }
 

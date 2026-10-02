@@ -269,24 +269,33 @@ Controls.Popup {
                     onClicked: dialog.showDetails = !dialog.showDetails
                     Accessible.description: "Mostra a saída técnica da instalação"
                 }
-                Controls.ScrollView {
+                Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 170
                     visible: dialog.showDetails
-                    Controls.TextArea {
-                        readOnly: true
-                        selectByMouse: true
-                        wrapMode: Text.WrapAnywhere
-                        text: dialog.installer.details
-                        font.family: "monospace"
-                        font.pixelSize: 11
-                        color: dialog.textColor
-                        background: Rectangle {
-                            radius: 8
-                            color: dialog.elevatedColor
-                            border.color: dialog.borderColor
+                    radius: 8
+                    color: dialog.elevatedColor
+                    border.color: dialog.borderColor
+
+                    Controls.ScrollView {
+                        id: detailsScroll
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        // A plain TextEdit: Breeze's TextArea passes itself to a property
+                        // typed TextInput and logs a warning every time it is created.
+                        TextEdit {
+                            width: detailsScroll.availableWidth
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: Text.WrapAnywhere
+                            text: dialog.installer.details
+                            font.family: "monospace"
+                            font.pixelSize: 11
+                            color: dialog.textColor
+                            selectionColor: dialog.accent
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: "Detalhes técnicos da instalação"
                         }
-                        Accessible.name: "Detalhes técnicos da instalação"
                     }
                 }
             }
