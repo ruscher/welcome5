@@ -11,8 +11,13 @@ SingleInstance::SingleInstance(QObject *parent)
         while (m_server.hasPendingConnections()) {
             QLocalSocket *socket = m_server.nextPendingConnection();
             connect(socket, &QLocalSocket::readyRead, this, [this, socket]() {
-                socket->readAll();
-                emit activationRequested();
+                // "activate" optionally followed by " <token>"; tokens are short ASCII.
+                const QByteArray message = socket->readAll().left(512).trimmed();
+                QString token;
+                if (message.startsWith("activate ")) {
+                    token = QString::fromLatin1(message.mid(9)).trimmed();
+                }
+                emit activationRequested(token);
                 socket->disconnectFromServer();
             });
             connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
@@ -22,8 +27,12 @@ SingleInstance::SingleInstance(QObject *parent)
 
 QString SingleInstance::serverName() const
 {
-    const QString localData = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    return QDir(localData).filePath(QStringLiteral("mainuan-welcome.sock"));
+    // $XDG_RUNTIME_DIR is private to the user and cleared at logout.
+    QString directory = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (directory.isEmpty()) {
+        directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    }
+    return QDir(directory).filePath(QStringLiteral("mainuan-welcome.sock"));
 }
 
 bool SingleInstance::tryAcquire()
@@ -34,7 +43,8 @@ bool SingleInstance::tryAcquire()
     QLocalSocket client;
     client.connectToServer(m_name);
     if (client.waitForConnected(150)) {
-        client.write("activate");
+        const QByteArray token = qgetenv("XDG_ACTIVATION_TOKEN");
+        client.write(token.isEmpty() ? QByteArray("activate") : QByteArray("activate ") + token);
         client.waitForBytesWritten(100);
         client.disconnectFromServer();
         return false;

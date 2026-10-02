@@ -5,3 +5,10 @@
 /.cache/
 *.user
 *.user.*
+/obj-*/
+/debian/.debhelper/
+/debian/mainuan-welcome/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/*.debhelper.log

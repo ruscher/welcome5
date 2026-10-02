@@ -3,6 +3,7 @@
 #include "services/InstallProgressParser.h"
 #include "services/InstallService.h"
 #include "services/PackageService.h"
+#include "services/StartupPreference.h"
 #include "services/SystemService.h"
 
 #include <QtTest>
@@ -136,6 +137,10 @@ private slots:
     void treatsDeniedFlatpakAuthorizationAsCancelled();
     void disablesAptProfilesOnNonDebianSystems();
     void rejectsUnknownProfiles();
+
+    void startupPreferenceDefaultsToShown();
+    void startupPreferenceIsStoredPerUser();
+    void startupPreferenceReadsPlasmaOverrides();
 };
 
 void MainuanTest::cleanup()
@@ -559,18 +564,23 @@ void MainuanTest::disablesAptProfilesOnNonDebianSystems()
     QVERIFY(waitForDetection(installer));
     QVERIFY(!installer.aptSupported());
 
-    // Without dpkg the state comes from files on this host, so only profiles
-    // that are not complete here must explain why they cannot be installed.
-    for (const QString &profile : {QStringLiteral("antivirus"), QStringLiteral("firewall"), QStringLiteral("codecs")}) {
-        const QVariantMap state = stateOf(installer, profile);
-        QVERIFY(!state.value(QStringLiteral("canInstall")).toBool());
-        if (state.value(QStringLiteral("state")) == QStringLiteral("installed")) {
-            continue;
-        }
-        QVERIFY(!state.value(QStringLiteral("unavailableReason")).toString().isEmpty());
-        QVERIFY(runToEnd(installer, profile));
+    // Without dpkg the state comes from files on this host. Codecs are APT only:
+    // unless the host already has them, they must be reported as unavailable.
+    const QVariantMap codecs = stateOf(installer, QStringLiteral("codecs"));
+    if (codecs.value(QStringLiteral("state")) != QStringLiteral("installed")) {
+        QVERIFY(!codecs.value(QStringLiteral("canInstall")).toBool());
+        QVERIFY(!codecs.value(QStringLiteral("unavailableReason")).toString().isEmpty());
+        QVERIFY(runToEnd(installer, QStringLiteral("codecs")));
         QCOMPARE(installer.phase(), QStringLiteral("error"));
         QVERIFY(installer.resultMessage().contains(QStringLiteral("Debian ou Ubuntu")));
+    }
+    // Any profile that cannot be installed explains why; Flatpak-only gaps stay installable.
+    for (const QString &profile : {QStringLiteral("antivirus"), QStringLiteral("firewall"), QStringLiteral("codecs")}) {
+        const QVariantMap state = stateOf(installer, profile);
+        if (state.value(QStringLiteral("state")) != QStringLiteral("installed")
+            && !state.value(QStringLiteral("canInstall")).toBool()) {
+            QVERIFY(!state.value(QStringLiteral("unavailableReason")).toString().isEmpty());
+        }
     }
 }
 
@@ -586,6 +596,69 @@ void MainuanTest::rejectsUnknownProfiles()
     QVERIFY(!installer.registerApplication(QStringLiteral("com.brave.Browser"), QStringLiteral("Brave"), {}, {}));
     QVERIFY(!installer.busy());
     QVERIFY(!installer.launch(QStringLiteral("unknown")));
+}
+
+void MainuanTest::startupPreferenceDefaultsToShown()
+{
+    QTemporaryDir home;
+    StartupPreference preference(nullptr, home.path());
+    QVERIFY(preference.showAtStartup());
+    QCOMPARE(QFileInfo(preference.overridePath()).fileName(), QStringLiteral("org.mainuan.Welcome.desktop"));
+    QVERIFY(!QFileInfo::exists(preference.overridePath()));
+}
+
+void MainuanTest::startupPreferenceIsStoredPerUser()
+{
+    QTemporaryDir firstUser;
+    QTemporaryDir secondUser;
+    StartupPreference preference(nullptr, firstUser.path());
+    QSignalSpy changed(&preference, &StartupPreference::showAtStartupChanged);
+
+    preference.setShowAtStartup(false);
+    QVERIFY(!preference.showAtStartup());
+    QCOMPARE(changed.count(), 1);
+    QFile file(preference.overridePath());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray contents = file.readAll();
+    QVERIFY(contents.contains("[Desktop Entry]"));
+    QVERIFY(contents.contains("Hidden=true"));
+
+    // The choice survives a restart and does not affect another user.
+    QVERIFY(!StartupPreference(nullptr, firstUser.path()).showAtStartup());
+    QVERIFY(StartupPreference(nullptr, secondUser.path()).showAtStartup());
+
+    preference.setShowAtStartup(true);
+    QVERIFY(preference.showAtStartup());
+    QVERIFY(!QFileInfo::exists(preference.overridePath()));
+    QVERIFY(StartupPreference(nullptr, firstUser.path()).showAtStartup());
+    QCOMPARE(changed.count(), 2);
+
+    preference.setShowAtStartup(true); // no-op
+    QCOMPARE(changed.count(), 2);
+}
+
+void MainuanTest::startupPreferenceReadsPlasmaOverrides()
+{
+    QTemporaryDir home;
+    StartupPreference preference(nullptr, home.path());
+    QDir().mkpath(QFileInfo(preference.overridePath()).absolutePath());
+    const auto write = [&preference](const QByteArray &contents) {
+        QFile file(preference.overridePath());
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(contents);
+    };
+
+    write("[Desktop Entry]\nExec=mainuan-welcome\nHidden = TRUE\n");
+    preference.reload();
+    QVERIFY(!preference.showAtStartup());
+
+    write("[Desktop Entry]\nExec=mainuan-welcome\nHidden=false\n[Desktop Action x]\nHidden=true\n");
+    preference.reload();
+    QVERIFY(preference.showAtStartup());
+
+    write("[Desktop Entry]\nHiddenSomething=true\n");
+    preference.reload();
+    QVERIFY(preference.showAtStartup());
 }
 
 QTEST_GUILESS_MAIN(MainuanTest)

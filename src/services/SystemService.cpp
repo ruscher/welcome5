@@ -61,6 +61,9 @@ constexpr int kBlurStrength = 15;
 constexpr int kGlassStrength = 4;
 constexpr int kBlurThreshold = 9;
 
+// Shipped by the Mainuan artwork; referenced in place instead of bundling a copy.
+const QString kMainuanLogo = QStringLiteral("/usr/share/plasma/avatars/logoMainuan.png");
+
 QString kwinrcPath()
 {
     const QString configHome = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
@@ -89,6 +92,7 @@ SystemService::SystemService(QObject *parent)
     : QObject(parent)
     , m_configPath(kdeGlobalsPath())
     , m_sessionType(qEnvironmentVariable("XDG_SESSION_TYPE", QStringLiteral("unknown")).toLower())
+    , m_logoSource(QFileInfo(kMainuanLogo).isReadable() ? QUrl::fromLocalFile(kMainuanLogo).toString() : QString())
 {
     connect(&m_configWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
         readDesktopState();
@@ -122,6 +126,11 @@ bool SystemService::visualStyleAvailable() const
 QString SystemService::sessionType() const
 {
     return m_sessionType;
+}
+
+QString SystemService::logoSource() const
+{
+    return m_logoSource;
 }
 
 QString SystemService::plasmaVersion() const
