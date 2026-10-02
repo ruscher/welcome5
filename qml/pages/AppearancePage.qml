@@ -1,0 +1,290 @@
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+Kirigami.Page {
+    id: page
+    property var system
+    property var layouts
+    property bool dark: false
+    property color accent: "#3daee9"
+    property color pageColor: "#f3f5f9"
+    property color surfaceColor: "#ffffff"
+    property color elevatedColor: "#f5f7fb"
+    property color borderColor: "#d9deea"
+    property color textColor: "#202532"
+    property color mutedColor: "#697286"
+    property color successColor: "#2da65a"
+
+    readonly property var accentPalette: [
+        { color: "#d08040", name: "Laranja" },
+        { color: "#e8177d", name: "Rosa" },
+        { color: "#3daee9", name: "Azul" },
+        { color: "#3dd425", name: "Verde" },
+        { color: "#aab6b9", name: "Cinza" },
+        { color: "#a588cb", name: "Lilás" }
+    ]
+
+    title: "Aparência"
+    padding: 0
+    background: Rectangle { color: page.pageColor }
+
+    component Separator: Rectangle {
+        Layout.fillWidth: true
+        Layout.leftMargin: 54
+        implicitHeight: 1
+    }
+
+    Controls.ScrollView {
+        anchors.fill: parent
+        clip: true
+
+        ColumnLayout {
+            id: content
+            width: Math.min(page.width - 48, 1080)
+            x: Math.max(24, (page.width - width) / 2)
+            y: 24
+            spacing: 12
+
+            Kirigami.Heading { text: "Aparência"; level: 1 }
+            Controls.Label {
+                Layout.fillWidth: true
+                text: "Personalize as cores, a transparência e a disposição da sua área de trabalho."
+                color: page.mutedColor
+                wrapMode: Text.WordWrap
+            }
+
+            MessageBanner {
+                Layout.fillWidth: true
+                text: page.system.lastMessage
+                dark: page.dark
+                accent: page.accent
+                textColor: page.textColor
+            }
+
+            Controls.Label {
+                Layout.topMargin: 12
+                text: "Aparência do sistema"
+                color: page.mutedColor
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                Accessible.role: Accessible.Heading
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: systemColumn.implicitHeight
+                radius: 12
+                color: page.surfaceColor
+                border.color: page.borderColor
+
+                ColumnLayout {
+                    id: systemColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: 0
+
+                    SettingRow {
+                        Layout.fillWidth: true
+                        title: "Estilo visual"
+                        subtitle: page.system.visualStyleAvailable
+                                  ? "Transparência e desfoque dos painéis e das janelas."
+                                  : "Disponível apenas em uma sessão do KDE Plasma em execução."
+                        iconName: "preferences-desktop-effects"
+                        accent: page.accent; textColor: page.textColor; mutedColor: page.mutedColor
+                        compactWidth: 720
+
+                        SegmentedChoice {
+                            enabled: page.system.visualStyleAvailable && !page.system.busy
+                            groupName: "Estilo visual"
+                            current: page.system.visualStyle
+                            options: [
+                                { value: "blur", label: "Desfocado", icon: "blur" },
+                                { value: "glass", label: "Vítreo", icon: "window" },
+                                { value: "solid", label: "Sólido", icon: "object-fill" }
+                            ]
+                            onActivated: (value) => page.system.setVisualStyle(value)
+                        }
+                    }
+
+                    Separator { color: page.borderColor }
+
+                    SettingRow {
+                        Layout.fillWidth: true
+                        title: "Tema do sistema"
+                        subtitle: "Cores claras ou escuras em todo o sistema."
+                        iconName: "preferences-desktop-theme"
+                        accent: page.accent; textColor: page.textColor; mutedColor: page.mutedColor
+
+                        SegmentedChoice {
+                            enabled: !page.system.busy
+                            groupName: "Tema do sistema"
+                            current: page.dark ? "dark" : "light"
+                            options: [
+                                { value: "light", label: "Claro", icon: "weather-clear" },
+                                { value: "dark", label: "Escuro", icon: "weather-clear-night" }
+                            ]
+                            onActivated: (value) => page.system.setTheme(value)
+                        }
+                    }
+
+                    Separator { color: page.borderColor }
+
+                    SettingRow {
+                        Layout.fillWidth: true
+                        title: "Cor de destaque"
+                        subtitle: "Cor usada em botões, seleções e elementos ativos."
+                        iconName: "color-picker"
+                        accent: page.accent; textColor: page.textColor; mutedColor: page.mutedColor
+
+                        Row {
+                            spacing: 8
+                            Accessible.role: Accessible.Grouping
+                            Accessible.name: "Cor de destaque"
+                            Repeater {
+                                model: page.accentPalette
+                                delegate: Controls.AbstractButton {
+                                    id: swatch
+                                    required property var modelData
+                                    readonly property bool selected: page.accent.toString().toLowerCase() === modelData.color
+                                    implicitWidth: 30
+                                    implicitHeight: 30
+                                    enabled: !page.system.busy
+                                    focusPolicy: Qt.StrongFocus
+                                    onClicked: if (!selected) page.system.setAccent(modelData.color)
+                                    Accessible.role: Accessible.RadioButton
+                                    Accessible.checkable: true
+                                    Accessible.checked: selected
+                                    Accessible.name: "Cor de destaque " + modelData.name
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.text: modelData.name
+                                    Controls.ToolTip.delay: 400
+
+                                    background: Rectangle {
+                                        radius: width / 2
+                                        color: swatch.modelData.color
+                                        opacity: swatch.enabled ? 1 : 0.5
+                                        border.width: swatch.selected || swatch.visualFocus ? 2 : 1
+                                        border.color: swatch.selected || swatch.visualFocus ? page.textColor
+                                                                                            : Qt.rgba(0, 0, 0, 0.18)
+                                        scale: swatch.hovered && !swatch.selected ? 1.08 : 1
+                                        Behavior on scale { NumberAnimation { duration: 120 } }
+                                    }
+                                    contentItem: Kirigami.Icon {
+                                        source: "checkmark"
+                                        color: "#ffffff"
+                                        visible: swatch.selected
+                                        anchors.centerIn: parent
+                                        width: 16
+                                        height: 16
+                                        Accessible.ignored: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Controls.Label {
+                Layout.topMargin: 16
+                text: "Layout do desktop"
+                color: page.mutedColor
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                Accessible.role: Accessible.Heading
+            }
+            Controls.Label {
+                Layout.fillWidth: true
+                text: "A função antiga foi auditada: apenas o perfil nativo é reconhecido como seguro no Plasma 6.6."
+                color: page.mutedColor
+                wrapMode: Text.WordWrap
+            }
+
+            GridLayout {
+                id: layoutGrid
+                Layout.fillWidth: true
+                Layout.bottomMargin: 24
+                readonly property int cardMinimum: 240
+                columns: Math.max(1, Math.min(4, Math.floor((width + columnSpacing) / (cardMinimum + columnSpacing))))
+                columnSpacing: 14
+                rowSpacing: 14
+
+                Repeater {
+                    model: page.layouts
+                    delegate: Rectangle {
+                        id: layoutCard
+                        required property string layoutId
+                        required property string name
+                        required property string description
+                        required property string status
+                        required property bool available
+
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: layoutGrid.cardMinimum
+                        implicitHeight: cardColumn.implicitHeight + 32
+                        radius: 14
+                        color: page.surfaceColor
+                        border.color: available ? page.accent : (cardHover.hovered ? Qt.rgba(page.accent.r, page.accent.g, page.accent.b, 0.45) : page.borderColor)
+                        opacity: available ? 1 : 0.72
+                        HoverHandler { id: cardHover }
+
+                        ColumnLayout {
+                            id: cardColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 16
+                            spacing: 10
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 86
+                                radius: 10
+                                color: page.elevatedColor
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Repeater {
+                                        model: layoutCard.layoutId === "panel-top" ? 4 : 3
+                                        delegate: Rectangle {
+                                            required property int index
+                                            width: 32
+                                            height: 42
+                                            radius: 4
+                                            color: Qt.rgba(page.accent.r, page.accent.g, page.accent.b, 0.35 + index * 0.12)
+                                        }
+                                    }
+                                }
+                            }
+                            Controls.Label { Layout.fillWidth: true; text: layoutCard.name; color: page.textColor; font.weight: Font.DemiBold }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.max(implicitHeight, 34)
+                                text: layoutCard.description
+                                color: page.mutedColor
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: layoutCard.status
+                                    color: layoutCard.available ? page.successColor : page.mutedColor
+                                    font.pixelSize: 11
+                                }
+                                Controls.Button {
+                                    text: "Aplicar"
+                                    enabled: layoutCard.available && !page.system.busy
+                                    onClicked: page.system.applyLayout(layoutCard.layoutId)
+                                    Accessible.name: "Aplicar layout " + layoutCard.name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
