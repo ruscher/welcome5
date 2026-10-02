@@ -42,6 +42,20 @@ KSharedConfig::Ptr freshConfig(const QString &name)
     return config;
 }
 
+// plasma-apply-colorscheme announces the new palette before AccentColor is
+// written, so running applications (Plasma and the Welcome itself) kept the
+// previous accent until the next change. Announce it again, as System Settings
+// does, once everything is on disk.
+void announcePaletteChange()
+{
+    KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->reparseConfiguration();
+    KSharedConfig::openConfig()->reparseConfiguration();
+    QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/KGlobalSettings"), QStringLiteral("org.kde.KGlobalSettings"),
+                                                     QStringLiteral("notifyChange"));
+    signal << 0 << 0; // KGlobalSettings::PaletteChanged
+    QDBusConnection::sessionBus().send(signal);
+}
+
 bool lookAndFeelInstalled(const QString &package)
 {
     const QString base = QStringLiteral("plasma/look-and-feel/") + package;
@@ -513,6 +527,7 @@ void SystemService::setAccent(const QString &accent)
                                        QStringLiteral("%1,%2,%3").arg(color.red()).arg(color.green()).arg(color.blue()),
                                        KConfig::Notify);
                     general.sync();
+                    announcePaletteChange();
                     readDesktopState();
                     applyAccentWallpaper(normalized, QStringLiteral("Cor de destaque aplicada."));
                 });

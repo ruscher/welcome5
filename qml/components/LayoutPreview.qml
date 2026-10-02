@@ -6,7 +6,7 @@ Rectangle {
 
     property string layoutId: ""
     property color accent: "#3daee9"
-    property color panelColor: "#ffffff"
+    property color panelColor: "#4f5a70"
     property color borderColor: "#d9deea"
 
     // Shapes in fractions of the screen: x, y, w, h; "pill" rounds the ends,

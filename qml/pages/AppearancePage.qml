@@ -233,6 +233,7 @@ Kirigami.Page {
                     readonly property bool active: page.layoutManager.activeLayout === layoutId
 
                     Layout.fillWidth: true
+                    Layout.fillHeight: true // cards of a row share one height
                     Layout.preferredWidth: layoutGrid.cardMinimum
                     implicitHeight: cardColumn.implicitHeight + 28
                     radius: 14
@@ -245,9 +246,7 @@ Kirigami.Page {
 
                     ColumnLayout {
                         id: cardColumn
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
+                        anchors.fill: parent
                         anchors.margins: 14
                         spacing: 8
 
@@ -255,7 +254,7 @@ Kirigami.Page {
                             Layout.fillWidth: true
                             layoutId: layoutCard.layoutId
                             accent: page.accent
-                            panelColor: page.dark ? "#d8dde6" : "#ffffff"
+                            panelColor: page.dark ? "#d8dde6" : "#4f5a70"
                             borderColor: page.borderColor
                         }
                         RowLayout {
@@ -293,6 +292,7 @@ Kirigami.Page {
                             wrapMode: Text.WordWrap
                             FontMetrics { id: fontMetrics; font.pixelSize: 12 }
                         }
+                        Item { Layout.fillHeight: true }
                         Controls.Button {
                             Layout.alignment: Qt.AlignRight
                             text: layoutCard.active ? "Aplicado" : "Aplicar"
