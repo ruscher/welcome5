@@ -6,6 +6,7 @@
 #include "services/LayoutService.h"
 #include "services/PackageService.h"
 #include "services/StartupPreference.h"
+#include "services/SystemReportService.h"
 #include "services/SystemService.h"
 #include "services/VisualStyle.h"
 
@@ -147,6 +148,9 @@ private slots:
     void treatsDeniedFlatpakAuthorizationAsCancelled();
     void disablesAptProfilesOnNonDebianSystems();
     void rejectsUnknownProfiles();
+
+    void parsesSystemReportSources();
+    void collectsSystemReportWithoutSecrets();
 
     void startupPreferenceDefaultsToShown();
     void startupPreferenceIsStoredPerUser();
@@ -968,6 +972,122 @@ void MainuanTest::rejectsUnknownProfiles()
     QVERIFY(!installer.registerApplication(QStringLiteral("com.brave.Browser"), QStringLiteral("Brave"), {}, {}));
     QVERIFY(!installer.busy());
     QVERIFY(!installer.launch(QStringLiteral("unknown")));
+}
+
+void MainuanTest::parsesSystemReportSources()
+{
+    const auto os = SystemReportService::parseOsRelease(QStringLiteral(
+        "PRETTY_NAME=\"Mainuan 2026 LTS\"\nVERSION=\"2026 LTS (MAO Tite)\"\nUBUNTU_CODENAME=resolute\n# comment\nID=ubuntu\n"));
+    QCOMPARE(os.value(QStringLiteral("PRETTY_NAME")), QStringLiteral("Mainuan 2026 LTS"));
+    QCOMPARE(os.value(QStringLiteral("VERSION")), QStringLiteral("2026 LTS (MAO Tite)"));
+    QCOMPARE(os.value(QStringLiteral("ID")), QStringLiteral("ubuntu"));
+
+    const auto cpu = SystemReportService::parseCpuInfo(QStringLiteral(
+        "processor\t: 0\nmodel name\t: AMD Ryzen   5 5600X\nphysical id\t: 0\ncore id\t: 0\n\n"
+        "processor\t: 1\nmodel name\t: AMD Ryzen 5 5600X\nphysical id\t: 0\ncore id\t: 0\n\n"
+        "processor\t: 2\nphysical id\t: 0\ncore id\t: 1\n"));
+    QCOMPARE(cpu.model, QStringLiteral("AMD Ryzen 5 5600X"));
+    QCOMPARE(cpu.threads, 3);
+    QCOMPARE(cpu.cores, 2);
+
+    const auto memory = SystemReportService::parseMemInfo(QStringLiteral(
+        "MemTotal:       16000000 kB\nMemFree: 1 kB\nMemAvailable:    9000000 kB\nSwapTotal: 2000 kB\nSwapFree: 500 kB\n"));
+    QCOMPARE(memory.totalKiB, 16000000);
+    QCOMPARE(memory.availableKiB, 9000000);
+    QCOMPARE(memory.swapTotalKiB, 2000);
+    QCOMPARE(memory.swapFreeKiB, 500);
+
+    QCOMPARE(SystemReportService::countInstalledPackages(QStringLiteral(
+        "Package: a\nStatus: install ok installed\n\nPackage: b\nStatus: deinstall ok config-files\n\n"
+        "Package: c\nStatus: install ok installed\n")), 2);
+
+    QCOMPARE(SystemReportService::maskMac(QStringLiteral("52:54:00:12:34:56\n")), QStringLiteral("52:54:00:xx:xx:xx"));
+    QVERIFY(SystemReportService::maskMac(QStringLiteral("garbage")).isEmpty());
+
+    QCOMPARE(SystemReportService::humanDuration(30), QStringLiteral("menos de um minuto"));
+    QCOMPARE(SystemReportService::humanDuration(60), QStringLiteral("1 minuto"));
+    QCOMPARE(SystemReportService::humanDuration(2 * 3600 + 18 * 60), QStringLiteral("2 horas e 18 minutos"));
+    QCOMPARE(SystemReportService::humanDuration(86400 + 3 * 3600), QStringLiteral("1 dia e 3 horas"));
+
+    const auto pci = SystemReportService::parseLspci(QStringLiteral(
+        "00:01.0 \"VGA compatible controller\" \"Red Hat, Inc.\" \"Virtio 1.0 GPU\" -r01 \"Red Hat, Inc.\" \"QEMU\"\n"
+        "01:00.0 \"3D controller\" \"NVIDIA Corporation\" \"GA107M\" -ra1\n"));
+    QCOMPARE(pci.value(QStringLiteral("00:01.0")), QStringLiteral("Red Hat, Inc. Virtio 1.0 GPU"));
+    QCOMPARE(pci.value(QStringLiteral("01:00.0")), QStringLiteral("NVIDIA Corporation GA107M"));
+}
+
+void MainuanTest::collectsSystemReportWithoutSecrets()
+{
+    QTemporaryDir root;
+    const auto write = [&root](const QString &relative, const QByteArray &contents) {
+        const QString file = root.filePath(relative);
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        QFile out(file);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(contents);
+    };
+    write(QStringLiteral("etc/os-release"), "PRETTY_NAME=\"Mainuan 2026 LTS\"\nVERSION=\"2026 LTS (MAO Tite)\"\nID=ubuntu\nUBUNTU_CODENAME=resolute\n");
+    write(QStringLiteral("proc/cpuinfo"), "processor : 0\nmodel name : Test CPU\n");
+    write(QStringLiteral("proc/meminfo"), "MemTotal: 8000000 kB\nMemAvailable: 6000000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n");
+    write(QStringLiteral("proc/uptime"), "8280.55 1000.00\n");
+    write(QStringLiteral("var/lib/dpkg/status"), "Package: a\nStatus: install ok installed\n\nPackage: b\nStatus: deinstall ok config-files\n");
+    write(QStringLiteral("var/log/installer/media-info"), "Mainuan 2026 \"MAO Tite\" - Release amd64\n");
+    write(QStringLiteral("boot/vmlinuz-7.0.0-30-generic"), "");
+    write(QStringLiteral("sys/class/net/eth0/address"), "52:54:00:12:34:56\n");
+    write(QStringLiteral("sys/class/net/eth0/operstate"), "up\n");
+    write(QStringLiteral("sys/class/net/eth0/device/vendor"), "0x1af4\n");
+
+    SystemReportService report(nullptr, root.path());
+    QSignalSpy changed(&report, &SystemReportService::changed);
+    report.refresh();
+    QVERIFY(changed.count() == 1 || changed.wait(5000));
+    QVERIFY(report.ready());
+    QVERIFY(!report.busy());
+
+    const QString text = report.reportText();
+    QVERIFY(text.startsWith(QStringLiteral("Mainuan System Report\n")));
+    QVERIFY(text.contains(QStringLiteral("Distribuição: Mainuan 2026 LTS")));
+    QVERIFY(text.contains(QStringLiteral("Base: Ubuntu resolute")));
+    QVERIFY(text.contains(QStringLiteral("Mídia de instalação: Mainuan 2026 \"MAO Tite\" - Release amd64")));
+    QVERIFY(text.contains(QStringLiteral("Data da instalação: ")));        // from the installer log
+    QVERIFY(!text.contains(QStringLiteral("Data estimada")));
+    QVERIFY(text.contains(QStringLiteral("Processador: Test CPU")));
+    QVERIFY(text.contains(QStringLiteral("APT / dpkg: 1 pacotes")));
+    QVERIFY(text.contains(QStringLiteral("Ligado há: 2 horas e 18 minutos")));
+    QVERIFY(text.contains(QStringLiteral("Kernels instalados: 7.0.0-30-generic")));
+    QVERIFY(text.contains(QStringLiteral("Snap: Snap não instalado")));
+    QVERIFY(text.contains(QStringLiteral("eth0: Ethernet")));
+    QVERIFY(text.contains(QStringLiteral("MAC 52:54:00:xx:xx:xx")));
+    QVERIFY(!text.contains(QStringLiteral("12:34:56")));
+    QVERIFY(!text.contains(QStringLiteral("Nome do computador")));
+    QVERIFY(!text.contains(QSysInfo::machineHostName()));
+    QVERIFY(!text.contains(QRegularExpression(QStringLiteral("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b"))));  // no IPv4 addresses
+
+    const QVariantList sections = report.sections();
+    QStringList ids;
+    for (const QVariant &section : sections) {
+        ids << section.toMap().value(QStringLiteral("id")).toString();
+    }
+    QCOMPARE(ids, (QStringList{QStringLiteral("system"), QStringLiteral("desktop"), QStringLiteral("hardware"),
+                               QStringLiteral("graphics"), QStringLiteral("memory"), QStringLiteral("storage"),
+                               QStringLiteral("packages"), QStringLiteral("boot"), QStringLiteral("network")}));
+    QCOMPARE(report.summary().value(QStringLiteral("os")).toString(), QStringLiteral("Mainuan 2026 LTS"));
+    QVERIFY(!report.summary().value(QStringLiteral("installEstimated")).toBool());
+
+    QTemporaryDir out;
+    const QString saved = out.filePath(QStringLiteral("mainuan-system-report.txt"));
+    QVERIFY(report.saveReport(QUrl::fromLocalFile(saved)));
+    QFile file(saved);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(file.readAll()), text);
+    QVERIFY(!report.saveReport(QUrl(QStringLiteral("https://example.com/report.txt"))));
+
+    // Without the installer log the date is only an estimate, and says so.
+    QVERIFY(QFile::remove(root.filePath(QStringLiteral("var/log/installer/media-info"))));
+    QVERIFY(QDir(root.filePath(QStringLiteral("var/log/installer"))).removeRecursively());
+    report.refresh();
+    QVERIFY(!report.reportText().contains(QStringLiteral("Data da instalação:")));
+    QVERIFY(report.reportText().contains(QStringLiteral("Data estimada da instalação:")));
 }
 
 void MainuanTest::startupPreferenceDefaultsToShown()

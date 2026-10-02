@@ -17,6 +17,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
     Qml
     Quick
     QuickControls2
+    Widgets
     DBus
     Network
     Multimedia
@@ -50,6 +51,8 @@ add_library(mainuan-core STATIC
     src/services/SingleInstance.h
     src/services/LayoutService.cpp
     src/services/LayoutService.h
+    src/services/SystemReportService.cpp
+    src/services/SystemReportService.h
     src/services/StartupPreference.cpp
     src/services/StartupPreference.h
     src/models/ApplicationModel.cpp
@@ -98,6 +101,8 @@ qt_add_qml_module(mainuan-welcome
         qml/components/SettingRow.qml
         qml/components/PageContainer.qml
         qml/components/LayoutPreview.qml
+        qml/components/InfoTile.qml
+        qml/components/ReportDialog.qml
         qml/components/SegmentedChoice.qml
         qml/components/MessageBanner.qml
         qml/components/InstallDialog.qml
@@ -154,6 +159,7 @@ target_link_libraries(mainuan-welcome PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Widgets
     Qt6::Network
     Qt6::Multimedia
 )

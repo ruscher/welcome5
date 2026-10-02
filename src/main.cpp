@@ -6,8 +6,10 @@
 #include "services/PackageService.h"
 #include "services/SingleInstance.h"
 #include "services/StartupPreference.h"
+#include "services/SystemReportService.h"
 #include "services/SystemService.h"
 
+#include <QApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
@@ -21,7 +23,9 @@
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication app(argc, argv);
+    // QApplication rather than QGuiApplication: Plasma's platform integration only
+    // offers its native file dialogs (used by "Salvar relatório") to widget apps.
+    QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Mainuan Welcome"));
     app.setApplicationDisplayName(QStringLiteral("Mainuan — Bem-vindo"));
     app.setOrganizationName(QStringLiteral("Mainuan"));
@@ -97,6 +101,7 @@ int main(int argc, char *argv[])
     browserModel.setInstallService(&installService);
 
     StartupPreference startupPreference;
+    SystemReportService systemReport;
     LayoutService layoutService;
     layoutService.refresh();
     VideoModel videoModel;
@@ -108,6 +113,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("installService"), &installService);
     engine.rootContext()->setContextProperty(QStringLiteral("startupPreference"), &startupPreference);
     engine.rootContext()->setContextProperty(QStringLiteral("layoutService"), &layoutService);
+    engine.rootContext()->setContextProperty(QStringLiteral("systemReport"), &systemReport);
     engine.rootContext()->setContextProperty(QStringLiteral("officeModel"), &officeModel);
     engine.rootContext()->setContextProperty(QStringLiteral("browserModel"), &browserModel);
     engine.rootContext()->setContextProperty(QStringLiteral("videoModel"), &videoModel);
