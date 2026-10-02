@@ -246,4 +246,6 @@ if (Qt6Test_FOUND)
         MAINUAN_TEST_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/rootfs/usr/libexec/mainuan-welcome/mainuan-welcome-helper"
         MAINUAN_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     add_test(NAME tst_mainuan COMMAND tst_mainuan)
+    add_test(NAME smoke_startup COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke.sh $<TARGET_FILE:mainuan-welcome>)
+    set_tests_properties(smoke_startup PROPERTIES SKIP_RETURN_CODE 77)
 endif()
