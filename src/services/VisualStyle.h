@@ -5,8 +5,9 @@
 
 // The three visual styles offered by Aparência > Estilo visual. Each one is a
 // complete Mainuan look: a Plasma global theme (Look-and-Feel package) in a
-// light and a dark variant, the Mainuan wallpaper that goes with it and the
-// icon/cursor themes to use when the package refers to ones that are missing.
+// light and a dark variant plus the icon/cursor themes to use when the package
+// refers to ones that are missing. The wallpaper follows the accent color
+// (AccentProfile), not the style.
 struct VisualStyleProfile
 {
     QString id;           // identifier used by QML: "blur", "glass" or "solid"
@@ -15,7 +16,6 @@ struct VisualStyleProfile
     QString darkPackage;
     QString plasmaTheme;  // Plasma theme the package sets, used to recognise
                           // installs where LookAndFeelPackage was never written
-    QString wallpaper;    // file name in share/wallpapers
     QString fallbackLightIcons;
     QString fallbackDarkIcons;
     QString fallbackCursor;

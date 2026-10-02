@@ -4,19 +4,19 @@ namespace VisualStyles {
 
 const QList<VisualStyleProfile> &profiles()
 {
-    // Package ids, wallpapers and themes as shipped by Mainuan 2026.
+    // Package ids and themes as shipped by Mainuan 2026.
     static const QList<VisualStyleProfile> list = {
         {QStringLiteral("blur"), QStringLiteral("Dream"),
          QStringLiteral("Dream-Light-Color-Global-6"), QStringLiteral("Dream-Dark-Color-Global-6"),
-         QStringLiteral("Dream-Color-Plasma"), QStringLiteral("01ciano.png"),
+         QStringLiteral("Dream-Color-Plasma"),
          QStringLiteral("kora-cyan"), QStringLiteral("kora-cyan"), QStringLiteral("breeze_cursors")},
         {QStringLiteral("glass"), QStringLiteral("Tahoe"),
          QStringLiteral("com.github.vinceliuice.MacTahoe-Light"), QStringLiteral("com.github.vinceliuice.MacTahoe-Dark"),
-         QStringLiteral("MacTahoe"), QStringLiteral("01ciano.png"),
+         QStringLiteral("MacTahoe"),
          QStringLiteral("breeze"), QStringLiteral("breeze-dark"), QStringLiteral("breeze_cursors")},
         {QStringLiteral("solid"), QStringLiteral("Breeze"),
          QStringLiteral("org.kde.breeze.desktop"), QStringLiteral("org.kde.breezedark.desktop"),
-         QStringLiteral("default"), QStringLiteral("02cinza.png"),
+         QStringLiteral("default"),
          QStringLiteral("breeze"), QStringLiteral("breeze-dark"), QStringLiteral("breeze_cursors")},
     };
     return list;

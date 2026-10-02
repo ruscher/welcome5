@@ -70,13 +70,13 @@ Kirigami.ApplicationWindow {
 
     ListModel {
         id: navigationModel
-        ListElement { label: "Início"; iconName: "go-home" }
-        ListElement { label: "Aparência"; iconName: "preferences-desktop-theme" }
-        ListElement { label: "Office"; iconName: "office-address-book" }
-        ListElement { label: "Navegadores"; iconName: "internet-web-browser" }
-        ListElement { label: "Tutoriais"; iconName: "media-playback-start" }
-        ListElement { label: "Sobre"; iconName: "help-about" }
-        ListElement { label: "Contribuir"; iconName: "love" }
+        ListElement { label: "Início"; iconName: "house" }
+        ListElement { label: "Aparência"; iconName: "palette" }
+        ListElement { label: "Office"; iconName: "briefcase" }
+        ListElement { label: "Navegadores"; iconName: "globe" }
+        ListElement { label: "Tutoriais"; iconName: "circle-play" }
+        ListElement { label: "Sobre"; iconName: "info" }
+        ListElement { label: "Contribuir"; iconName: "heart" }
     }
 
     RowLayout {
@@ -195,12 +195,12 @@ Kirigami.ApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: root.currentPage
                 HomePage { system: systemService; installer: installService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor; warningColor: root.warningColor; onInstallRequested: (profileId) => root.openInstallDialog(profileId) }
-                AppearancePage { system: systemService; layouts: layoutModel; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
+                AppearancePage { system: systemService; layouts: layoutModel; layoutManager: layoutService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
                 AppsPage { appModel: officeModel; pkgService: packageService; installer: installService; system: systemService; onInstallRequested: (profileId) => root.openInstallDialog(profileId); pageTitle: "Office"; pageDescription: "Instale ferramentas de produtividade ou abra serviços online."; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
                 AppsPage { appModel: browserModel; pkgService: packageService; installer: installService; system: systemService; onInstallRequested: (profileId) => root.openInstallDialog(profileId); pageTitle: "Navegadores"; pageDescription: "Escolha seu navegador preferido para navegar na web."; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
                 TutorialsPage { tutorialModel: videoModel; hostWindow: root; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
-                AboutPage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
-                ContributePage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
+                AboutPage { system: systemService; report: systemReport; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
+                ContributePage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
             }
         }
     }

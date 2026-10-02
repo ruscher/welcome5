@@ -27,74 +27,67 @@ Kirigami.Page {
     padding: 0
     background: Rectangle { color: page.pageColor }
 
-    Controls.ScrollView {
-        anchors.fill: parent
-        clip: true
-        ColumnLayout {
-            width: Math.max(0, page.width - 48)
-            x: 24
-            y: 24
+    PageContainer {
+        contentSpacing: 14
+
+        Kirigami.Heading { text: page.pageTitle; level: 1 }
+        Controls.Label {
+            Layout.fillWidth: true
+            text: page.pageDescription
+            color: page.mutedColor
+            wrapMode: Text.WordWrap
+        }
+        Controls.Label {
+            visible: !page.pkgService.flatpakAvailable
+            Layout.fillWidth: true
+            text: "Flatpak não foi encontrado. A detecção e a instalação estão indisponíveis neste sistema."
+            color: page.mutedColor
+            wrapMode: Text.WordWrap
+        }
+        Controls.Label {
+            visible: page.pkgService.lastMessage.length > 0
+            Layout.fillWidth: true
+            text: page.pkgService.lastMessage
+            color: page.pkgService.lastMessage.indexOf("Falha") === 0 ? "#c94444" : page.mutedColor
+            wrapMode: Text.WordWrap
+        }
+
+        Flow {
+            id: cardFlow
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.max(300, Math.ceil(appRepeater.count / 3) * 300 + Math.max(0, Math.ceil(appRepeater.count / 3) - 1) * 14)
+            Layout.minimumHeight: Layout.preferredHeight
             spacing: 14
-
-            Kirigami.Heading { text: page.pageTitle; level: 1 }
-            Controls.Label {
-                Layout.fillWidth: true
-                text: page.pageDescription
-                color: page.mutedColor
-                wrapMode: Text.WordWrap
-            }
-            Controls.Label {
-                visible: !page.pkgService.flatpakAvailable
-                Layout.fillWidth: true
-                text: "Flatpak não foi encontrado. A detecção e a instalação estão indisponíveis neste sistema."
-                color: page.mutedColor
-                wrapMode: Text.WordWrap
-            }
-            Controls.Label {
-                visible: page.pkgService.lastMessage.length > 0
-                Layout.fillWidth: true
-                text: page.pkgService.lastMessage
-                color: page.pkgService.lastMessage.indexOf("Falha") === 0 ? "#c94444" : page.mutedColor
-                wrapMode: Text.WordWrap
-            }
-
-            Flow {
-                id: cardFlow
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(300, Math.ceil(appRepeater.count / 3) * 300 + Math.max(0, Math.ceil(appRepeater.count / 3) - 1) * 14)
-                Layout.minimumHeight: Layout.preferredHeight
-                spacing: 14
-                Repeater {
-                    id: appRepeater
-                    model: page.appModel
-                    delegate: AppCard {
-                        width: Math.max(220, Math.min(310, (cardFlow.width - 28) / 3))
-                        appModel: page.appModel
-                        system: page.system
-                        row: index
-                        dark: page.dark
-                        accent: page.accent
-                        surfaceColor: page.surfaceColor
-                        elevatedColor: page.elevatedColor
-                        borderColor: page.borderColor
-                        textColor: page.textColor
-                        mutedColor: page.mutedColor
-                        successColor: page.successColor
-                        appName: model.name
-                        appDescription: model.description
-                        appIcon: model.iconSource
-                        installed: model.installed
-                        busy: model.busy
-                        available: model.available
-                        installState: model.installState
-                        webUrl: model.webUrl
-                        installProfile: model.installProfile
-                        installerBusy: page.installer.busy
-                        onInstallRequested: (profileId) => page.installRequested(profileId)
-                    }
+            Repeater {
+                id: appRepeater
+                model: page.appModel
+                delegate: AppCard {
+                    width: Math.max(220, Math.min(310, (cardFlow.width - 28) / 3))
+                    appModel: page.appModel
+                    system: page.system
+                    row: index
+                    dark: page.dark
+                    accent: page.accent
+                    surfaceColor: page.surfaceColor
+                    elevatedColor: page.elevatedColor
+                    borderColor: page.borderColor
+                    textColor: page.textColor
+                    mutedColor: page.mutedColor
+                    successColor: page.successColor
+                    appName: model.name
+                    appDescription: model.description
+                    appIcon: model.iconSource
+                    installed: model.installed
+                    busy: model.busy
+                    available: model.available
+                    installState: model.installState
+                    webUrl: model.webUrl
+                    installProfile: model.installProfile
+                    installerBusy: page.installer.busy
+                    onInstallRequested: (profileId) => page.installRequested(profileId)
                 }
             }
-            Item { Layout.preferredHeight: 20 }
         }
+        Item { Layout.preferredHeight: 20 }
     }
 }

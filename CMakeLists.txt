@@ -17,6 +17,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
     Qml
     Quick
     QuickControls2
+    Widgets
     DBus
     Network
     Multimedia
@@ -26,6 +27,9 @@ find_package(Qt6 6.5 QUIET COMPONENTS Test)
 # KConfig reads Plasma settings through the same cascade Plasma uses
 # (~/.config/kdedefaults holds the values written by global themes).
 find_package(KF6Config 6.0 REQUIRED)
+# QR codes for Contribuir are generated locally.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(QRENCODE REQUIRED IMPORTED_TARGET libqrencode)
 find_package(KF6Kirigami QUIET CONFIG)
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -37,6 +41,8 @@ add_library(mainuan-core STATIC
     src/services/SystemService.cpp
     src/services/SystemService.h
     src/services/VisualStyle.cpp
+    src/services/AccentProfile.cpp
+    src/services/AccentProfile.h
     src/services/VisualStyle.h
     src/services/PackageService.cpp
     src/services/PackageService.h
@@ -46,6 +52,12 @@ add_library(mainuan-core STATIC
     src/services/InstallProgressParser.h
     src/services/SingleInstance.cpp
     src/services/SingleInstance.h
+    src/services/LayoutService.cpp
+    src/services/LayoutService.h
+    src/services/SystemReportService.cpp
+    src/services/SystemReportService.h
+    src/services/QrCode.cpp
+    src/services/QrCode.h
     src/services/StartupPreference.cpp
     src/services/StartupPreference.h
     src/models/ApplicationModel.cpp
@@ -57,6 +69,12 @@ add_library(mainuan-core STATIC
 )
 
 target_include_directories(mainuan-core PUBLIC src)
+# Plasma and KWin scripts used by LayoutService.
+qt_add_resources(mainuan-core layout_scripts
+    PREFIX "/layouts"
+    BASE src/layouts
+    FILES src/layouts/desktop-layouts.js src/layouts/kwin-tiling.js
+)
 target_compile_definitions(mainuan-core PRIVATE MAINUAN_HELPER_PATH="${MAINUAN_HELPER_PATH}")
 target_link_libraries(mainuan-core PUBLIC
     Qt6::Core
@@ -64,6 +82,7 @@ target_link_libraries(mainuan-core PUBLIC
     Qt6::DBus
     Qt6::Network
     KF6::ConfigCore
+    PkgConfig::QRENCODE
 )
 
 target_compile_options(mainuan-core PRIVATE
@@ -86,6 +105,11 @@ qt_add_qml_module(mainuan-welcome
         qml/components/StatusRow.qml
         qml/components/SidebarButton.qml
         qml/components/SettingRow.qml
+        qml/components/PageContainer.qml
+        qml/components/LayoutPreview.qml
+        qml/components/InfoTile.qml
+        qml/components/ActionCard.qml
+        qml/components/ReportDialog.qml
         qml/components/SegmentedChoice.qml
         qml/components/MessageBanner.qml
         qml/components/InstallDialog.qml
@@ -125,12 +149,24 @@ qt_add_resources(mainuan-welcome welcome_assets
     FILES ${MAINUAN_ASSETS}
 )
 
+# Line icons used across the interface (Lucide, ISC; see qml/icons/LICENSE.lucide).
+file(GLOB MAINUAN_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/qml/icons/*.svg")
+foreach(icon IN LISTS MAINUAN_ICONS)
+    get_filename_component(icon_name "${icon}" NAME)
+    set_source_files_properties("${icon}" PROPERTIES QT_RESOURCE_ALIAS "${icon_name}")
+endforeach()
+qt_add_resources(mainuan-welcome welcome_icons
+    PREFIX "/icons"
+    FILES ${MAINUAN_ICONS}
+)
+
 target_link_libraries(mainuan-welcome PRIVATE
     mainuan-core
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Widgets
     Qt6::Network
     Qt6::Multimedia
 )
@@ -170,6 +206,11 @@ install(FILES
 )
 
 install(FILES
+    rootfs/etc/mainuan/welcome.conf
+    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/mainuan
+)
+
+install(FILES
     rootfs/usr/share/metainfo/org.mainuan.Welcome.metainfo.xml
     DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
 )
@@ -205,4 +246,6 @@ if (Qt6Test_FOUND)
         MAINUAN_TEST_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/rootfs/usr/libexec/mainuan-welcome/mainuan-welcome-helper"
         MAINUAN_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     add_test(NAME tst_mainuan COMMAND tst_mainuan)
+    add_test(NAME smoke_startup COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke.sh $<TARGET_FILE:mainuan-welcome>)
+    set_tests_properties(smoke_startup PROPERTIES SKIP_RETURN_CODE 77)
 endif()

@@ -1,9 +1,13 @@
 #include "models/ApplicationModel.h"
 #include "models/VideoModel.h"
 #include "services/InstallProgressParser.h"
+#include "services/AccentProfile.h"
 #include "services/InstallService.h"
+#include "services/LayoutService.h"
 #include "services/PackageService.h"
+#include "services/QrCode.h"
 #include "services/StartupPreference.h"
+#include "services/SystemReportService.h"
 #include "services/SystemService.h"
 #include "services/VisualStyle.h"
 
@@ -118,6 +122,8 @@ private slots:
     void acceptsOnlyHexAccentColors();
     void rejectsUnexpectedPackageIds();
     void acceptsOnlyKnownLayouts();
+    void buildsLayoutScripts();
+    void backsUpAndRestoresPanelConfiguration();
     void mapsVisualStylesToMainuanThemes();
     void detectsVisualStyleFromPlasmaConfig();
     void appliesVisualStyleProfiles();
@@ -143,6 +149,10 @@ private slots:
     void treatsDeniedFlatpakAuthorizationAsCancelled();
     void disablesAptProfilesOnNonDebianSystems();
     void rejectsUnknownProfiles();
+
+    void rendersQrCodesLocally();
+    void parsesSystemReportSources();
+    void collectsSystemReportWithoutSecrets();
 
     void startupPreferenceDefaultsToShown();
     void startupPreferenceIsStoredPerUser();
@@ -176,9 +186,94 @@ void MainuanTest::rejectsUnexpectedPackageIds()
 
 void MainuanTest::acceptsOnlyKnownLayouts()
 {
-    QVERIFY(SystemService::isAllowedLayout(QStringLiteral("plasma-default")));
-    QVERIFY(SystemService::isAllowedLayout(QStringLiteral("tiling")));
-    QVERIFY(!SystemService::isAllowedLayout(QStringLiteral("../../tmp")));
+    QCOMPARE(LayoutService::layoutIds().size(), 6);
+    for (const QString &id : LayoutService::layoutIds()) {
+        QVERIFY(LayoutService::isAllowedLayout(id));
+        QVERIFY(!LayoutService::displayName(id).isEmpty());
+    }
+    QVERIFY(!LayoutService::isAllowedLayout(QStringLiteral("../../tmp")));
+    QVERIFY(!LayoutService::isAllowedLayout(QStringLiteral("unity\");panels().forEach(function(p){p.remove()});//")));
+}
+
+void MainuanTest::buildsLayoutScripts()
+{
+    const QString script = LayoutService::buildScript(QStringLiteral("unity"),
+        {QStringLiteral("Chaac.Complete.Weather"), QStringLiteral("x\"];panels().forEach(function(p){p.remove()});//"),
+         QStringLiteral("../escape"), QStringLiteral("com.mike.desktop")});
+    QVERIFY(script.startsWith(QStringLiteral("var installedWidgets = [\"Chaac.Complete.Weather\",\"com.mike.desktop\"];\n")));
+    QVERIFY(script.contains(QStringLiteral("function applyMainuanLayout(id)")));
+    QVERIFY(script.trimmed().endsWith(QStringLiteral("applyMainuanLayout(\"unity\");")));
+    QVERIFY(!script.contains(QStringLiteral("../escape")));
+    QVERIFY(LayoutService::buildScript(QStringLiteral("evil"), {}).isEmpty());
+
+    using Description = LayoutService::Description;
+    Description description = LayoutService::parseDescription(QStringLiteral("floating|1|1\n"));
+    QVERIFY(description.valid());
+    QCOMPARE(description.layout, QStringLiteral("floating"));
+    QCOMPARE(description.panels, 1);
+    QCOMPARE(description.launchers, 1);
+    description = LayoutService::parseDescription(QStringLiteral("|5|1"));
+    QVERIFY(description.valid());
+    QVERIFY(description.layout.isEmpty()); // custom layout, not one of the six
+    QVERIFY(LayoutService::parseDescription(QStringLiteral("hacked|5|1")).layout.isEmpty());
+    QVERIFY(!LayoutService::parseDescription(QStringLiteral("Error: TypeError")).valid());
+    QVERIFY(!LayoutService::parseDescription(QStringLiteral("unity|x|1")).valid());
+}
+
+void MainuanTest::backsUpAndRestoresPanelConfiguration()
+{
+    QTemporaryDir config;
+    QTemporaryDir backups;
+    const auto write = [&config](const QString &name, const QByteArray &contents) {
+        QFile file(config.filePath(name));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(contents);
+    };
+    const auto read = [&config](const QString &name) {
+        QFile file(config.filePath(name));
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    };
+    LayoutService service(nullptr, config.path(), backups.path());
+    QVERIFY(!service.hasBackup());
+    QVERIFY(service.createBackup().isEmpty()); // nothing to back up yet
+    QVERIFY(!service.hasBackup());
+
+    write(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), "[Containments][1]\nplugin=org.kde.panel\n");
+    write(QStringLiteral("plasmashellrc"), "[PlasmaViews][Panel 1]\nfloating=1\n");
+    const QString first = service.createBackup();
+    QVERIFY(!first.isEmpty());
+    QVERIFY(first.startsWith(backups.path()));
+    QVERIFY(service.hasBackup());
+
+    write(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), "broken");
+    write(QStringLiteral("plasmashellrc"), "broken");
+    QVERIFY(service.restoreFiles(first));
+    QCOMPARE(read(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc")), QByteArray("[Containments][1]\nplugin=org.kde.panel\n"));
+    QCOMPARE(read(QStringLiteral("plasmashellrc")), QByteArray("[PlasmaViews][Panel 1]\nfloating=1\n"));
+
+    // Five backups are kept: the first one (the user's own panels) and the newest.
+    QString newest;
+    for (int i = 0; i < 7; ++i) {
+        newest = service.createBackup();
+        QVERIFY(!newest.isEmpty());
+        QCOMPARE(service.backups().constLast(), newest); // ordered by sequence, not by clock
+    }
+    QCOMPARE(service.backups().size(), 5);
+    QCOMPARE(service.backups().constFirst(), first);
+
+    // A backup without the applets file is refused instead of "restored".
+    QDir(backups.path()).mkpath(QStringLiteral("incomplete"));
+    QVERIFY(!service.restoreFiles(backups.filePath(QStringLiteral("incomplete"))));
+    QCOMPARE(read(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc")), QByteArray("[Containments][1]\nplugin=org.kde.panel\n"));
+
+    // Outside Plasma nothing is applied and no backup is taken.
+    const int before = static_cast<int>(service.backups().size());
+    service.apply(QStringLiteral("floating"));
+    QVERIFY(!service.busy());
+    QVERIFY(service.messageIsError());
+    QCOMPARE(service.backups().size(), before);
+    service.apply(QStringLiteral("rm -rf"));
+    QCOMPARE(service.message(), QStringLiteral("Layout inválido."));
 }
 
 void MainuanTest::mapsVisualStylesToMainuanThemes()
@@ -190,16 +285,26 @@ void MainuanTest::mapsVisualStylesToMainuanThemes()
     QCOMPARE(dream->name, QStringLiteral("Dream"));
     QCOMPARE(dream->package(false), QStringLiteral("Dream-Light-Color-Global-6"));
     QCOMPARE(dream->package(true), QStringLiteral("Dream-Dark-Color-Global-6"));
-    QCOMPARE(dream->wallpaper, QStringLiteral("01ciano.png"));
     QCOMPARE(tahoe->name, QStringLiteral("Tahoe"));
     QCOMPARE(tahoe->package(false), QStringLiteral("com.github.vinceliuice.MacTahoe-Light"));
     QCOMPARE(tahoe->package(true), QStringLiteral("com.github.vinceliuice.MacTahoe-Dark"));
-    QCOMPARE(tahoe->wallpaper, QStringLiteral("01ciano.png"));
     QCOMPARE(breeze->name, QStringLiteral("Breeze"));
     QCOMPARE(breeze->package(false), QStringLiteral("org.kde.breeze.desktop"));
     QCOMPARE(breeze->package(true), QStringLiteral("org.kde.breezedark.desktop"));
-    QCOMPARE(breeze->wallpaper, QStringLiteral("02cinza.png"));
     QCOMPARE(VisualStyles::profiles().size(), 3);
+
+    // Each accent color carries the Mainuan wallpaper of the same color.
+    const QList<QPair<QString, QString>> wallpapers = {
+        {QStringLiteral("#d08040"), QStringLiteral("05marrom.png")}, {QStringLiteral("#e8177d"), QStringLiteral("03magenta.png")},
+        {QStringLiteral("#3daee9"), QStringLiteral("01ciano.png")},  {QStringLiteral("#3dd425"), QStringLiteral("06lima.png")},
+        {QStringLiteral("#aab6b9"), QStringLiteral("02cinza.png")},  {QStringLiteral("#a588cb"), QStringLiteral("04purpura.png")}};
+    QCOMPARE(AccentProfiles::profiles().size(), wallpapers.size());
+    for (const auto &[color, wallpaper] : wallpapers) {
+        QVERIFY(AccentProfiles::find(color));
+        QCOMPARE(AccentProfiles::find(color)->wallpaper, wallpaper);
+    }
+    QCOMPARE(AccentProfiles::find(QStringLiteral("#E8177D"))->name, QStringLiteral("Rosa"));
+    QVERIFY(!AccentProfiles::find(QStringLiteral("#123456")));
 
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("blur")));
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("glass")));
@@ -243,8 +348,9 @@ public:
                 touch(data + QStringLiteral("/plasma/look-and-feel/") + package + QStringLiteral("/metadata.json"));
             }
         }
-        touch(data + QStringLiteral("/wallpapers/01ciano.png"));
-        touch(data + QStringLiteral("/wallpapers/02cinza.png"));
+        for (const AccentProfile &accent : AccentProfiles::profiles()) {
+            touch(data + QStringLiteral("/wallpapers/") + accent.wallpaper);
+        }
         for (const QString &icons : {QStringLiteral("breeze"), QStringLiteral("breeze-dark"), QStringLiteral("kora-cyan")}) {
             touch(data + QStringLiteral("/icons/") + icons + QStringLiteral("/index.theme"));
         }
@@ -317,9 +423,8 @@ void MainuanTest::appliesVisualStyleProfiles()
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
     QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Dream aplicado."));
-    QCOMPARE(sandbox.takeCalls(), (QStringList{
-        QStringLiteral("lookandfeel Dream-Light-Color-Global-6"),
-        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+    // The style does not touch the wallpaper; it follows the accent color.
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("lookandfeel Dream-Light-Color-Global-6")}));
 
     // Tahoe names icon and cursor themes Mainuan does not ship: Breeze fallbacks.
     service.setVisualStyle(QStringLiteral("glass"));
@@ -329,14 +434,13 @@ void MainuanTest::appliesVisualStyleProfiles()
     QCOMPARE(sandbox.takeCalls(), (QStringList{
         QStringLiteral("lookandfeel com.github.vinceliuice.MacTahoe-Light"),
         QStringLiteral("plasma-changeicons breeze"),
-        QStringLiteral("plasma-apply-cursortheme breeze_cursors"),
-        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+        QStringLiteral("plasma-apply-cursortheme breeze_cursors")}));
 
     service.setVisualStyle(QStringLiteral("solid"));
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("solid"));
     QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Breeze aplicado."));
-    QVERIFY(sandbox.takeCalls().constLast().endsWith(QStringLiteral("/wallpapers/02cinza.png")));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("lookandfeel org.kde.breeze.desktop")}));
 
     // Repeated switching keeps working and the state is read back by a new instance.
     for (const QString &style : {QStringLiteral("blur"), QStringLiteral("solid"), QStringLiteral("glass")}) {
@@ -376,13 +480,9 @@ void MainuanTest::reportsVisualStyleFailures()
     qunsetenv("MOCK_LNF_NOOP");
     sandbox.takeCalls();
 
-    // A secondary step fails: the style is applied and the gap is reported.
-    qputenv("MOCK_WALLPAPER_FAIL", "1");
     service.setVisualStyle(QStringLiteral("blur"));
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
-    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Estilo Dream aplicado. Não foi possível ajustar: papel de parede."));
-    qunsetenv("MOCK_WALLPAPER_FAIL");
 
     // Missing package.
     QVERIFY(QFile::remove(sandbox.data() + QStringLiteral("/plasma/look-and-feel/org.kde.breeze.desktop/metadata.json")));
@@ -435,13 +535,40 @@ void MainuanTest::recordsTheChosenAccentColor()
 
     service.setAccent(QStringLiteral("#E8177D"));
     QVERIFY(waitIdle(service));
-    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("plasma-apply-colorscheme --accent-color #e8177d")}));
-    QCOMPARE(service.lastMessage(), QStringLiteral("Cor de destaque aplicada."));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{
+        QStringLiteral("plasma-apply-colorscheme --accent-color #e8177d"),
+        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/03magenta.png")}));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Cor Rosa e papel de parede aplicados."));
     QCOMPARE(service.accentColor(), QStringLiteral("#e8177d"));
     // Stored where System Settings stores it, so Plasma keeps it across global themes.
     QFile globals(sandbox.config() + QStringLiteral("/kdeglobals"));
     QVERIFY(globals.open(QIODevice::ReadOnly));
     QVERIFY(globals.readAll().contains("AccentColor=232,23,125"));
+
+    // Each color applies its own wallpaper.
+    for (const AccentProfile &accent : AccentProfiles::profiles()) {
+        service.setAccent(accent.color);
+        QVERIFY(waitIdle(service));
+        QCOMPARE(sandbox.takeCalls().constLast(),
+                 QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/") + accent.wallpaper);
+        QCOMPARE(service.accentColor(), accent.color);
+    }
+
+    // Missing wallpaper: the color is applied, the wallpaper is reported, not claimed.
+    QVERIFY(QFile::remove(sandbox.data() + QStringLiteral("/wallpapers/06lima.png")));
+    service.setAccent(QStringLiteral("#3dd425"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("plasma-apply-colorscheme --accent-color #3dd425")}));
+    QCOMPARE(service.accentColor(), QStringLiteral("#3dd425"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Cor Verde aplicada, mas o papel de parede 06lima.png não foi encontrado."));
+
+    // The wallpaper tool fails.
+    qputenv("MOCK_WALLPAPER_FAIL", "1");
+    service.setAccent(QStringLiteral("#3daee9"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Cor Azul aplicada, mas não foi possível trocar o papel de parede."));
+    qunsetenv("MOCK_WALLPAPER_FAIL");
+    sandbox.takeCalls();
 
     service.setAccent(QStringLiteral("red; rm -rf ~"));
     QVERIFY(!service.busy());
@@ -854,6 +981,143 @@ void MainuanTest::rejectsUnknownProfiles()
     QVERIFY(!installer.registerApplication(QStringLiteral("com.brave.Browser"), QStringLiteral("Brave"), {}, {}));
     QVERIFY(!installer.busy());
     QVERIFY(!installer.launch(QStringLiteral("unknown")));
+}
+
+void MainuanTest::rendersQrCodesLocally()
+{
+    const QImage image = QrCode::render(QStringLiteral("mestresemlinux@gmail.com"), 4, 2);
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.width(), image.height());
+    QCOMPARE(image.width() % 4, 0);
+    QCOMPARE(image.pixelColor(0, 0), QColor(Qt::white));              // quiet zone
+    QCOMPARE(image.pixelColor(2 * 4, 2 * 4), QColor(Qt::black));      // finder pattern corner
+    QVERIFY(QrCode::render(QString()).isNull());
+    QVERIFY(QrCode::dataUrl(QStringLiteral("x")).startsWith(QStringLiteral("data:image/png;base64,")));
+    QVERIFY(QrCode::dataUrl(QString()).isEmpty());
+}
+
+void MainuanTest::parsesSystemReportSources()
+{
+    const auto os = SystemReportService::parseOsRelease(QStringLiteral(
+        "PRETTY_NAME=\"Mainuan 2026 LTS\"\nVERSION=\"2026 LTS (MAO Tite)\"\nUBUNTU_CODENAME=resolute\n# comment\nID=ubuntu\n"));
+    QCOMPARE(os.value(QStringLiteral("PRETTY_NAME")), QStringLiteral("Mainuan 2026 LTS"));
+    QCOMPARE(os.value(QStringLiteral("VERSION")), QStringLiteral("2026 LTS (MAO Tite)"));
+    QCOMPARE(os.value(QStringLiteral("ID")), QStringLiteral("ubuntu"));
+
+    const auto cpu = SystemReportService::parseCpuInfo(QStringLiteral(
+        "processor\t: 0\nmodel name\t: AMD Ryzen   5 5600X\nphysical id\t: 0\ncore id\t: 0\n\n"
+        "processor\t: 1\nmodel name\t: AMD Ryzen 5 5600X\nphysical id\t: 0\ncore id\t: 0\n\n"
+        "processor\t: 2\nphysical id\t: 0\ncore id\t: 1\n"));
+    QCOMPARE(cpu.model, QStringLiteral("AMD Ryzen 5 5600X"));
+    QCOMPARE(cpu.threads, 3);
+    QCOMPARE(cpu.cores, 2);
+
+    const auto memory = SystemReportService::parseMemInfo(QStringLiteral(
+        "MemTotal:       16000000 kB\nMemFree: 1 kB\nMemAvailable:    9000000 kB\nSwapTotal: 2000 kB\nSwapFree: 500 kB\n"));
+    QCOMPARE(memory.totalKiB, 16000000);
+    QCOMPARE(memory.availableKiB, 9000000);
+    QCOMPARE(memory.swapTotalKiB, 2000);
+    QCOMPARE(memory.swapFreeKiB, 500);
+
+    QCOMPARE(SystemReportService::countInstalledPackages(QStringLiteral(
+        "Package: a\nStatus: install ok installed\n\nPackage: b\nStatus: deinstall ok config-files\n\n"
+        "Package: c\nStatus: install ok installed\n")), 2);
+
+    QCOMPARE(SystemReportService::maskMac(QStringLiteral("52:54:00:12:34:56\n")), QStringLiteral("52:54:00:xx:xx:xx"));
+    QVERIFY(SystemReportService::maskMac(QStringLiteral("garbage")).isEmpty());
+    QCOMPARE(SystemReportService::publicInterfaceName(QStringLiteral("enx001122334455")), QStringLiteral("enx001122xxxxxx"));
+    QCOMPARE(SystemReportService::publicInterfaceName(QStringLiteral("wlp2s0")), QStringLiteral("wlp2s0"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/")), QStringLiteral("/"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/boot/efi")), QStringLiteral("/boot/efi"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/home")), QStringLiteral("/home"));
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/media/ana/PENDRIVE")).isEmpty());
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/run/media/ana/Fotos")).isEmpty());
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/home/ana/dados")).isEmpty());
+
+    QCOMPARE(SystemReportService::humanDuration(30), QStringLiteral("menos de um minuto"));
+    QCOMPARE(SystemReportService::humanDuration(60), QStringLiteral("1 minuto"));
+    QCOMPARE(SystemReportService::humanDuration(2 * 3600 + 18 * 60), QStringLiteral("2 horas e 18 minutos"));
+    QCOMPARE(SystemReportService::humanDuration(86400 + 3 * 3600), QStringLiteral("1 dia e 3 horas"));
+
+    const auto pci = SystemReportService::parseLspci(QStringLiteral(
+        "00:01.0 \"VGA compatible controller\" \"Red Hat, Inc.\" \"Virtio 1.0 GPU\" -r01 \"Red Hat, Inc.\" \"QEMU\"\n"
+        "01:00.0 \"3D controller\" \"NVIDIA Corporation\" \"GA107M\" -ra1\n"));
+    QCOMPARE(pci.value(QStringLiteral("00:01.0")), QStringLiteral("Red Hat, Inc. Virtio 1.0 GPU"));
+    QCOMPARE(pci.value(QStringLiteral("01:00.0")), QStringLiteral("NVIDIA Corporation GA107M"));
+}
+
+void MainuanTest::collectsSystemReportWithoutSecrets()
+{
+    QTemporaryDir root;
+    const auto write = [&root](const QString &relative, const QByteArray &contents) {
+        const QString file = root.filePath(relative);
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        QFile out(file);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(contents);
+    };
+    write(QStringLiteral("etc/os-release"), "PRETTY_NAME=\"Mainuan 2026 LTS\"\nVERSION=\"2026 LTS (MAO Tite)\"\nID=ubuntu\nUBUNTU_CODENAME=resolute\n");
+    write(QStringLiteral("proc/cpuinfo"), "processor : 0\nmodel name : Test CPU\n");
+    write(QStringLiteral("proc/meminfo"), "MemTotal: 8000000 kB\nMemAvailable: 6000000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n");
+    write(QStringLiteral("proc/uptime"), "8280.55 1000.00\n");
+    write(QStringLiteral("var/lib/dpkg/status"), "Package: a\nStatus: install ok installed\n\nPackage: b\nStatus: deinstall ok config-files\n");
+    write(QStringLiteral("var/log/installer/media-info"), "Mainuan 2026 \"MAO Tite\" - Release amd64\n");
+    write(QStringLiteral("boot/vmlinuz-7.0.0-30-generic"), "");
+    write(QStringLiteral("sys/class/net/eth0/address"), "52:54:00:12:34:56\n");
+    write(QStringLiteral("sys/class/net/eth0/operstate"), "up\n");
+    write(QStringLiteral("sys/class/net/eth0/device/vendor"), "0x1af4\n");
+
+    SystemReportService report(nullptr, root.path());
+    QSignalSpy changed(&report, &SystemReportService::changed);
+    report.refresh();
+    QVERIFY(changed.count() == 1 || changed.wait(5000));
+    QVERIFY(report.ready());
+    QVERIFY(!report.busy());
+
+    const QString text = report.reportText();
+    QVERIFY(text.startsWith(QStringLiteral("Mainuan System Report\n")));
+    QVERIFY(text.contains(QStringLiteral("Distribuição: Mainuan 2026 LTS")));
+    QVERIFY(text.contains(QStringLiteral("Base: Ubuntu resolute")));
+    QVERIFY(text.contains(QStringLiteral("Mídia de instalação: Mainuan 2026 \"MAO Tite\" - Release amd64")));
+    QVERIFY(text.contains(QStringLiteral("Data da instalação: ")));        // from the installer log
+    QVERIFY(!text.contains(QStringLiteral("Data estimada")));
+    QVERIFY(text.contains(QStringLiteral("Processador: Test CPU")));
+    QVERIFY(text.contains(QStringLiteral("APT / dpkg: 1 pacotes")));
+    QVERIFY(text.contains(QStringLiteral("Ligado há: 2 horas e 18 minutos")));
+    QVERIFY(text.contains(QStringLiteral("Kernels instalados: 7.0.0-30-generic")));
+    QVERIFY(text.contains(QStringLiteral("Snap: Snap não instalado")));
+    QVERIFY(text.contains(QStringLiteral("eth0: Ethernet")));
+    QVERIFY(text.contains(QStringLiteral("MAC 52:54:00:xx:xx:xx")));
+    QVERIFY(!text.contains(QStringLiteral("12:34:56")));
+    QVERIFY(!text.contains(QStringLiteral("Nome do computador")));
+    QVERIFY(!text.contains(QSysInfo::machineHostName()));
+    QVERIFY(!text.contains(QRegularExpression(QStringLiteral("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b"))));  // no IPv4 addresses
+
+    const QVariantList sections = report.sections();
+    QStringList ids;
+    for (const QVariant &section : sections) {
+        ids << section.toMap().value(QStringLiteral("id")).toString();
+    }
+    QCOMPARE(ids, (QStringList{QStringLiteral("system"), QStringLiteral("desktop"), QStringLiteral("hardware"),
+                               QStringLiteral("graphics"), QStringLiteral("memory"), QStringLiteral("storage"),
+                               QStringLiteral("packages"), QStringLiteral("boot"), QStringLiteral("network")}));
+    QCOMPARE(report.summary().value(QStringLiteral("os")).toString(), QStringLiteral("Mainuan 2026 LTS"));
+    QVERIFY(!report.summary().value(QStringLiteral("installEstimated")).toBool());
+
+    QTemporaryDir out;
+    const QString saved = out.filePath(QStringLiteral("mainuan-system-report.txt"));
+    QVERIFY(report.saveReport(QUrl::fromLocalFile(saved)));
+    QFile file(saved);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(file.readAll()), text);
+    QVERIFY(!report.saveReport(QUrl(QStringLiteral("https://example.com/report.txt"))));
+
+    // Without the installer log the date is only an estimate, and says so.
+    QVERIFY(QFile::remove(root.filePath(QStringLiteral("var/log/installer/media-info"))));
+    QVERIFY(QDir(root.filePath(QStringLiteral("var/log/installer"))).removeRecursively());
+    report.refresh();
+    QVERIFY(!report.reportText().contains(QStringLiteral("Data da instalação:")));
+    QVERIFY(report.reportText().contains(QStringLiteral("Data estimada da instalação:")));
 }
 
 void MainuanTest::startupPreferenceDefaultsToShown()
