@@ -8,8 +8,13 @@ runtime=$(mktemp -d)
 log=$(mktemp)
 trap 'rm -rf "$runtime" "$log"' EXIT
 
-env -u QT_LOGGING_RULES XDG_RUNTIME_DIR="$runtime" XDG_CONFIG_HOME="$runtime/config" \
-    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 4 "$binary" >"$log" 2>&1
+# A private session bus (or none) keeps the run away from a live Plasma session.
+bus=()
+if command -v dbus-run-session >/dev/null; then
+    bus=(dbus-run-session --)
+fi
+env -u QT_LOGGING_RULES -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$runtime" XDG_CONFIG_HOME="$runtime/config" \
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software "${bus[@]}" timeout 4 "$binary" >"$log" 2>&1
 status=$?
 
 if grep -q 'module "org.kde.kirigami" is not installed' "$log"; then

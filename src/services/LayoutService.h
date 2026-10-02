@@ -68,11 +68,12 @@ private:
     void runTilingScript(const QString &path, std::function<void(bool ok)> done);
     QDBusPendingCall callKWin(const QString &path, const QString &interface, const QString &method,
                               const QVariantList &arguments);
+    void controlPlasma(const QString &action, std::function<void(bool ok)> done);
     void restartPlasmaWithBackup(const QString &backupDirectory, std::function<void(bool ok)> done);
     void waitForPlasma(int attempts, std::function<void(bool ok)> done);
     void finish(const QString &message, bool error);
     void setMessage(const QString &message, bool error);
-    void pruneBackups();
+    void pruneBackups(const QString &keep);
 
     QString m_configDir;
     QString m_backupDir;

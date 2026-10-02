@@ -57,6 +57,11 @@ public:
     static Memory parseMemInfo(const QString &text);
     static int countInstalledPackages(const QString &dpkgStatus);
     static QString maskMac(const QString &mac);
+    // System mount points as they are; anything else (removable media, user
+    // mounts) returns an empty string because the path names the user or volume.
+    static QString publicMountPoint(const QString &mountPoint);
+    // Interface names derived from the MAC (enx…, wlx…) with the device part masked.
+    static QString publicInterfaceName(const QString &interface);
     static QString humanBytes(qint64 bytes);
     static QString humanDuration(qint64 seconds);
     // "00:02.0" → "Vendor Device" from `lspci -mm`.

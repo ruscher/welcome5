@@ -42,7 +42,7 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Unity-like | Barra superior de 28 px (menu global, bandeja, relógio) + lançador vertical de 56 px à esquerda. |
 | Tiling | Barra superior compacta de 30 px + blocos nativos do KWin (`workspace.rootTile`): um bloco grande e dois empilhados em cada tela e área de trabalho. Sem Bismuth/Polonium. |
 
-- **Cópia de segurança:** `plasma-org.kde.plasma.desktop-appletsrc` e `plasmashellrc` copiados para `$XDG_DATA_HOME/mainuan-welcome/layout-backups/<data-hora>/` antes de cada troca; ficam as 5 mais recentes.
+- **Cópia de segurança:** `plasma-org.kde.plasma.desktop-appletsrc` e `plasmashellrc` copiados para `$XDG_DATA_HOME/mainuan-welcome/layout-backups/<sequência>-<hora UTC>/` antes de cada troca (a sequência mantém a ordem mesmo se o relógio voltar). Ficam 5 cópias: a primeira (os painéis do usuário antes de qualquer troca, nunca apagada) e as mais recentes. A restauração troca cada arquivo de forma atômica (`QSaveFile`) e recusa uma cópia sem o arquivo de applets.
 - **Verificação e reversão:** depois do script, `describeMainuanLayout()` precisa devolver a marca do layout, ao menos um painel e um menu de aplicativos; senão (ou com erro/tempo-limite de 20 s) o Welcome restaura a cópia.
 - **Restauração:** `systemctl --user stop plasma-plasmashell.service`, copia, `start`. `dumpCurrentLayoutJS`/`loadSerializedLayout` foram testados e descartados: no Plasma 6.6 alteram alturas, comprimento e ordem dos widgets.
 - **Detecção:** a marca `MainuanLayout` dos painéis; sem marca (painéis feitos à mão), nenhum card aparece como “Em uso”.
@@ -88,6 +88,13 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Prévias de layout no tema claro: barras brancas sobre fundo claro, quase invisíveis | barras em cinza-ardósia no tema claro |
 | Cards de layout da mesma linha com alturas diferentes | cards preenchem a linha; botão alinhado à base |
 | `waitForFinished` no tiling bloqueava a interface | chamadas encadeadas assíncronas |
+| Revisão: ponto de montagem de mídia removível (`/media/<usuário>/<rótulo>`) ia para o relatório | só locais do sistema; os demais viram “Outro volume N” |
+| Revisão: interfaces nomeadas pelo MAC (`enx001122334455`) expunham o MAC inteiro | parte do dispositivo mascarada (`enx001122xxxxxx`) |
+| Revisão: com o relógio voltando, a poda podia apagar a cópia recém-criada, e a reversão “restaurava” uma pasta vazia | nomes com sequência, poda que preserva a nova cópia e a original, restauração que falha sem o arquivo de applets |
+| Revisão: restauração apagava o arquivo antes de copiar (disco cheio = Plasma sem painéis) | `QSaveFile` (troca atômica) |
+| Revisão: `systemctl` sem tratamento de falha ao iniciar nem tempo-limite podia deixar o Welcome “ocupado” | auxiliar único com `errorOccurred` e tempo-limite de 60 s |
+| Revisão: disponibilidade do Plasma lida só na abertura | relida sempre que a Aparência aparece |
+| Revisão: o teste de fumaça usava o barramento D-Bus da sessão real | `dbus-run-session` (ou nenhum barramento) |
 
 ## Testes executados
 
@@ -109,6 +116,7 @@ Script do Plasma (`src/layouts/desktop-layouts.js`) executado por `org.kde.Plasm
 | Atualizar relatório 5× | contagem de descritores do processo | PASS: 27 antes e depois |
 | Pix | área de transferência; `zbarimg` sobre a captura do QR | PASS: decodifica a chave configurada |
 | Resoluções | 1360×768 (sidebar expandida e recolhida), 1920×1080, temas claro e escuro | PASS |
+| Escala | 125% e 150% (`kscreen-doctor`): Aparência, Sobre, relatório, Contribuir | PASS: a 150% a sidebar recolhe sozinha e o corpo do relatório rola |
 | Regressão | instalação e remoção do Google Chrome pelo modal; linhas de antivírus/firewall/codecs; instância única; autostart | PASS |
 | Journal | `journalctl --user` durante os testes | sem erros do Welcome; avisos só de plasmoides de terceiros |
 
@@ -118,8 +126,7 @@ Capturas em `docs/screenshots/` (sem dados pessoais; o nome do computador está 
 
 - O KWin não tem tiling automático: o layout Tiling cria os blocos, e as janelas são encaixadas arrastando com Shift.
 - Widgets de terceiros do layout padrão (clima, KdeControlStation, KDE AI Chat, ChatAI) são recriados com as configurações padrão deles.
-- Restaurar um layout reinicia o `plasmashell` (alguns segundos sem painéis).
+- Restaurar um layout reinicia o `plasmashell` (alguns segundos sem painéis). “Restaurar layout anterior” volta sempre para a cópia mais recente; a cópia original fica guardada na pasta de cópias, mas ainda não há botão para ela.
 - Multimonitor coberto pelo script (`screens()`, `showOnlyCurrentScreen`, `plasma-apply-wallpaperimage` em todos os desktops), mas não testado com monitores físicos reais.
 - Os esquemas de cores Dream trazem comentários na mesma linha dos valores (`0,167,181 ; #00A7B5`), e o KConfig avisa ao lê-los; o Welcome lê as cores manualmente e não é afetado.
 - No modal do instalador, a barra chega a 100% quando o download termina, e a instalação ainda leva alguns segundos (comportamento anterior a esta mudança).
-- Escala de 125%/150% não foi testada nesta rodada.

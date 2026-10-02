@@ -6,13 +6,17 @@
 #include <QDBusPendingReply>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLoggingCategory>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
+
+#include <memory>
 
 Q_LOGGING_CATEGORY(lcLayout, "mainuan.welcome.layout")
 
@@ -152,11 +156,18 @@ QStringList LayoutService::backups() const
     return complete; // oldest first
 }
 
+// Backups are named "<sequence>-<UTC time>": the sequence keeps them in order
+// even when the clock goes backwards (dual boot with the RTC in local time).
 QString LayoutService::createBackup()
 {
-    const QString directory = m_backupDir + QLatin1Char('/')
-        + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"));
-    if (!QDir().mkpath(directory)) {
+    const QStringList existing = backups();
+    const qulonglong sequence = existing.isEmpty()
+        ? 1
+        : QFileInfo(existing.constLast()).fileName().section(QLatin1Char('-'), 0, 0).toULongLong() + 1;
+    const QString directory = m_backupDir + QLatin1Char('/') + QStringLiteral("%1-%2")
+        .arg(sequence, 8, 10, QLatin1Char('0'))
+        .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddTHHmmsszzz")));
+    if (QFileInfo::exists(directory) || !QDir().mkpath(directory)) {
         return {};
     }
     for (const QString &name : kLayoutFiles) {
@@ -170,30 +181,49 @@ QString LayoutService::createBackup()
         QDir(directory).removeRecursively();
         return {};
     }
-    pruneBackups();
+    pruneBackups(directory);
     qCInfo(lcLayout) << "layout backup" << directory;
     return directory;
 }
 
-void LayoutService::pruneBackups()
+// Keeps the first backup (the panels the user had before ever using the
+// Welcome), the one just made and the newest others, up to kKeptBackups.
+void LayoutService::pruneBackups(const QString &keep)
 {
     QStringList existing = backups();
-    while (existing.size() > kKeptBackups) {
+    if (existing.size() <= kKeptBackups) {
+        return;
+    }
+    const QString original = existing.takeFirst();
+    existing.removeAll(keep);
+    qsizetype excess = existing.size() + 1 + (keep != original ? 1 : 0) - kKeptBackups;
+    while (excess-- > 0 && !existing.isEmpty()) {
         QDir(existing.takeFirst()).removeRecursively();
     }
 }
 
+// Each file is replaced atomically (QSaveFile), so a full disk never leaves
+// Plasma without its panel configuration. A backup without the applets file
+// is not a backup.
 bool LayoutService::restoreFiles(const QString &backupDirectory) const
 {
+    if (!QFile::exists(backupDirectory + QLatin1Char('/') + kLayoutFiles.constFirst())) {
+        return false;
+    }
     bool ok = true;
     for (const QString &name : kLayoutFiles) {
-        const QString source = backupDirectory + QLatin1Char('/') + name;
-        const QString target = m_configDir + QLatin1Char('/') + name;
-        if (!QFile::exists(source)) {
+        QFile source(backupDirectory + QLatin1Char('/') + name);
+        if (!source.exists()) {
             continue;
         }
-        QFile::remove(target);
-        ok = QFile::copy(source, target) && ok;
+        QSaveFile target(m_configDir + QLatin1Char('/') + name);
+        const bool copied = source.open(QIODevice::ReadOnly) && target.open(QIODevice::WriteOnly)
+            && target.write(source.readAll()) == source.size() && target.commit();
+        if (!copied) {
+            target.cancelWriting();
+            qCWarning(lcLayout) << "could not restore" << name << target.errorString();
+        }
+        ok = copied && ok;
     }
     return ok;
 }
@@ -385,35 +415,54 @@ void LayoutService::restoreBackup()
     });
 }
 
-// Plasma keeps the panel configuration in memory and rewrites the files, so a
-// file restore needs plasmashell stopped, the files copied and Plasma started.
-void LayoutService::restartPlasmaWithBackup(const QString &backupDirectory, std::function<void(bool)> done)
+// `systemctl --user <action> plasma-plasmashell.service`; `done` runs exactly
+// once, also when systemctl cannot start or hangs (killed after 60 s).
+void LayoutService::controlPlasma(const QString &action, std::function<void(bool ok)> done)
 {
     const QString systemctl = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
     if (systemctl.isEmpty()) {
         done(false);
         return;
     }
-    auto *stop = new QProcess(this);
-    stop->setStandardInputFile(QProcess::nullDevice());
-    connect(stop, &QProcess::finished, this, [this, stop, systemctl, backupDirectory, done](int exitCode, QProcess::ExitStatus) {
-        stop->deleteLater();
-        const bool copied = exitCode == 0 && restoreFiles(backupDirectory);
+    auto *process = new QProcess(this);
+    auto finished = std::make_shared<bool>(false);
+    const auto complete = [process, finished, done](bool ok) {
+        if (*finished) {
+            return;
+        }
+        *finished = true;
+        process->deleteLater();
+        done(ok);
+    };
+    process->setStandardInputFile(QProcess::nullDevice());
+    connect(process, &QProcess::finished, this, [complete](int exitCode, QProcess::ExitStatus status) {
+        complete(status == QProcess::NormalExit && exitCode == 0);
+    });
+    connect(process, &QProcess::errorOccurred, this, [complete](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            complete(false);
+        }
+    });
+    QTimer::singleShot(60000, process, [process]() { process->kill(); });
+    process->start(systemctl, {QStringLiteral("--user"), action, QStringLiteral("plasma-plasmashell.service")});
+}
+
+// Plasma keeps the panel configuration in memory and rewrites the files, so a
+// file restore needs plasmashell stopped, the files copied and Plasma started.
+void LayoutService::restartPlasmaWithBackup(const QString &backupDirectory, std::function<void(bool)> done)
+{
+    controlPlasma(QStringLiteral("stop"), [this, backupDirectory, done](bool stopped) {
+        const bool copied = stopped && restoreFiles(backupDirectory);
         qCInfo(lcLayout) << "restored files from" << backupDirectory << copied;
-        auto *start = new QProcess(this);
-        start->setStandardInputFile(QProcess::nullDevice());
-        connect(start, &QProcess::finished, this, [this, start, copied, done](int startExit, QProcess::ExitStatus) {
-            start->deleteLater();
-            if (startExit != 0) {
+        // Start Plasma again even if copying failed, so the session keeps a shell.
+        controlPlasma(QStringLiteral("start"), [this, copied, done](bool started) {
+            if (!started) {
                 done(false);
                 return;
             }
             waitForPlasma(15, [copied, done](bool running) { done(copied && running); });
         });
-        // Start Plasma again even if copying failed, so the session keeps a shell.
-        start->start(systemctl, {QStringLiteral("--user"), QStringLiteral("start"), QStringLiteral("plasma-plasmashell.service")});
     });
-    stop->start(systemctl, {QStringLiteral("--user"), QStringLiteral("stop"), QStringLiteral("plasma-plasmashell.service")});
 }
 
 void LayoutService::waitForPlasma(int attempts, std::function<void(bool)> done)

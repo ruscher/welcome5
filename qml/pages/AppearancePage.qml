@@ -30,6 +30,8 @@ Kirigami.Page {
     title: "Aparência"
     padding: 0
     background: Rectangle { color: page.pageColor }
+    // Plasma may not have answered yet when the Welcome starts at login.
+    onVisibleChanged: if (visible && layoutManager && !layoutManager.busy) layoutManager.refresh()
 
     component Separator: Rectangle {
         Layout.fillWidth: true

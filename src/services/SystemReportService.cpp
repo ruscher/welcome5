@@ -141,6 +141,22 @@ QString SystemReportService::maskMac(const QString &mac)
         .join(QLatin1Char(':'));
 }
 
+QString SystemReportService::publicMountPoint(const QString &mountPoint)
+{
+    // Removable and user mounts (/media/<user>/<label>, /run/media/…, /home/<user>/…)
+    // name the user or the volume, so only system locations are shown.
+    static const QRegularExpression system(QStringLiteral("^/(boot(/efi)?|home|var|usr|opt|srv|tmp)?$"));
+    return system.match(mountPoint).hasMatch() ? mountPoint : QString();
+}
+
+QString SystemReportService::publicInterfaceName(const QString &interface)
+{
+    // systemd names USB and some Wi-Fi adapters after their MAC (enx001122334455).
+    static const QRegularExpression byMac(QStringLiteral("^(enx|wlx)([0-9a-f]{6})[0-9a-f]{6}$"));
+    const QRegularExpressionMatch match = byMac.match(interface);
+    return match.hasMatch() ? match.captured(1) + match.captured(2) + QStringLiteral("xxxxxx") : interface;
+}
+
 QString SystemReportService::humanBytes(qint64 bytes)
 {
     return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
@@ -442,6 +458,7 @@ void SystemReportService::build()
                                                                 model.isEmpty() ? QString() : QStringLiteral(" · ") + model)};
     }
     QStorageInfo rootVolume;
+    int otherVolumes = 0;
     for (const QStorageInfo &volume : QStorageInfo::mountedVolumes()) {
         const QString device = QString::fromUtf8(volume.device());
         if (!volume.isValid() || !volume.isReady() || !device.startsWith(QStringLiteral("/dev/"))
@@ -452,7 +469,11 @@ void SystemReportService::build()
             rootVolume = volume;
         }
         const qint64 used = volume.bytesTotal() - volume.bytesFree();
-        storage.items << Item{volume.rootPath() + QStringLiteral(" (") + QString::fromUtf8(volume.fileSystemType()) + QLatin1Char(')'),
+        QString mountPoint = publicMountPoint(volume.rootPath());
+        if (mountPoint.isEmpty()) {
+            mountPoint = QStringLiteral("Outro volume %1").arg(++otherVolumes);
+        }
+        storage.items << Item{mountPoint + QStringLiteral(" (") + QString::fromUtf8(volume.fileSystemType()) + QLatin1Char(')'),
                               QStringLiteral("%1 usados de %2 · %3 livres").arg(humanBytes(used), humanBytes(volume.bytesTotal()), humanBytes(volume.bytesFree()))};
     }
     if (storage.items.isEmpty()) {
@@ -519,7 +540,7 @@ void SystemReportService::build()
         if (!mac.isEmpty()) {
             parts << QStringLiteral("MAC %1").arg(mac);
         }
-        network.items << Item{interface, parts.join(QStringLiteral(" · "))};
+        network.items << Item{publicInterfaceName(interface), parts.join(QStringLiteral(" · "))};
     }
     if (network.items.isEmpty()) {
         network.items << Item{QStringLiteral("Adaptadores"), kUnavailable};

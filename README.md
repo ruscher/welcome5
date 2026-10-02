@@ -91,7 +91,7 @@ Diagnóstico: `journalctl --user --since today | grep mainuan.welcome` mostra ca
 
 Seis layouts nativos do Plasma 6, criados por script do Plasma (`org.kde.PlasmaShell.evaluateScript`) em todas as telas, sem Latte nem Bismuth: **Plasma padrão** (as ilhas flutuantes do Mainuan), **Painel superior**, **Flutuante**, **Minimalista**, **Unity-like** e **Tiling** (barra compacta + blocos nativos do KWin, um grande e dois empilhados). O layout em uso é reconhecido pela marca `MainuanLayout` gravada nos painéis.
 
-Antes de cada troca, `plasma-org.kde.plasma.desktop-appletsrc` e `plasmashellrc` são copiados para `$XDG_DATA_HOME/mainuan-welcome/layout-backups/` (as 5 cópias mais recentes). Se o layout não for criado corretamente, a cópia é restaurada sozinha; **Restaurar layout anterior** faz o mesmo sob demanda (o Plasma reinicia por alguns segundos). Detalhes em `docs/14-ux-layouts-system-report-validation.md`.
+Antes de cada troca, `plasma-org.kde.plasma.desktop-appletsrc` e `plasmashellrc` são copiados para `$XDG_DATA_HOME/mainuan-welcome/layout-backups/` (ficam 5 cópias: a primeira, com os painéis que o usuário tinha antes de usar o Welcome, e as mais recentes). Se o layout não for criado corretamente, a cópia é restaurada sozinha; **Restaurar layout anterior** faz o mesmo sob demanda (o Plasma reinicia por alguns segundos). Detalhes em `docs/14-ux-layouts-system-report-validation.md`.
 
 ## Sobre e relatório da máquina
 

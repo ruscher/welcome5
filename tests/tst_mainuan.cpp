@@ -251,13 +251,20 @@ void MainuanTest::backsUpAndRestoresPanelConfiguration()
     QCOMPARE(read(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc")), QByteArray("[Containments][1]\nplugin=org.kde.panel\n"));
     QCOMPARE(read(QStringLiteral("plasmashellrc")), QByteArray("[PlasmaViews][Panel 1]\nfloating=1\n"));
 
-    // Only the five newest backups are kept.
+    // Five backups are kept: the first one (the user's own panels) and the newest.
+    QString newest;
     for (int i = 0; i < 7; ++i) {
-        QTest::qWait(2);
-        QVERIFY(!service.createBackup().isEmpty());
+        newest = service.createBackup();
+        QVERIFY(!newest.isEmpty());
+        QCOMPARE(service.backups().constLast(), newest); // ordered by sequence, not by clock
     }
     QCOMPARE(service.backups().size(), 5);
-    QVERIFY(!service.backups().contains(first));
+    QCOMPARE(service.backups().constFirst(), first);
+
+    // A backup without the applets file is refused instead of "restored".
+    QDir(backups.path()).mkpath(QStringLiteral("incomplete"));
+    QVERIFY(!service.restoreFiles(backups.filePath(QStringLiteral("incomplete"))));
+    QCOMPARE(read(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc")), QByteArray("[Containments][1]\nplugin=org.kde.panel\n"));
 
     // Outside Plasma nothing is applied and no backup is taken.
     const int before = static_cast<int>(service.backups().size());
@@ -1018,6 +1025,14 @@ void MainuanTest::parsesSystemReportSources()
 
     QCOMPARE(SystemReportService::maskMac(QStringLiteral("52:54:00:12:34:56\n")), QStringLiteral("52:54:00:xx:xx:xx"));
     QVERIFY(SystemReportService::maskMac(QStringLiteral("garbage")).isEmpty());
+    QCOMPARE(SystemReportService::publicInterfaceName(QStringLiteral("enx001122334455")), QStringLiteral("enx001122xxxxxx"));
+    QCOMPARE(SystemReportService::publicInterfaceName(QStringLiteral("wlp2s0")), QStringLiteral("wlp2s0"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/")), QStringLiteral("/"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/boot/efi")), QStringLiteral("/boot/efi"));
+    QCOMPARE(SystemReportService::publicMountPoint(QStringLiteral("/home")), QStringLiteral("/home"));
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/media/ana/PENDRIVE")).isEmpty());
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/run/media/ana/Fotos")).isEmpty());
+    QVERIFY(SystemReportService::publicMountPoint(QStringLiteral("/home/ana/dados")).isEmpty());
 
     QCOMPARE(SystemReportService::humanDuration(30), QStringLiteral("menos de um minuto"));
     QCOMPARE(SystemReportService::humanDuration(60), QStringLiteral("1 minuto"));
