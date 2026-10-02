@@ -1,6 +1,7 @@
 #include "SystemService.h"
 
 #include "AccentProfile.h"
+#include "QrCode.h"
 #include "VisualStyle.h"
 
 #include <KConfigGroup>
@@ -271,25 +272,41 @@ void SystemService::readDesktopState()
     }
 }
 
+// [Contribute] PixKey (and optional PixPayload, a complete BR Code) from the
+// distribution's /etc/mainuan/welcome.conf, or from the user's copy.
 void SystemService::readPixKey()
 {
-    QString path = QStringLiteral("/etc/mainuan/welcome.conf");
-    QSettings systemSettings(path, QSettings::IniFormat);
-    systemSettings.beginGroup(QStringLiteral("Contribute"));
-    QString newKey = systemSettings.value(QStringLiteral("PixKey")).toString().trimmed();
-
-    if (newKey.isEmpty()) {
-        const QString userPath = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
-                                     .filePath(QStringLiteral("mainuan/welcome.conf"));
-        QSettings userSettings(userPath, QSettings::IniFormat);
-        userSettings.beginGroup(QStringLiteral("Contribute"));
-        newKey = userSettings.value(QStringLiteral("PixKey")).toString().trimmed();
+    const QStringList files = {QStringLiteral("/etc/mainuan/welcome.conf"),
+                               QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation))
+                                   .filePath(QStringLiteral("mainuan/welcome.conf"))};
+    QString newKey;
+    QString newPayload;
+    for (const QString &file : files) {
+        QSettings settings(file, QSettings::IniFormat);
+        settings.beginGroup(QStringLiteral("Contribute"));
+        newKey = settings.value(QStringLiteral("PixKey")).toString().trimmed();
+        newPayload = settings.value(QStringLiteral("PixPayload")).toString().trimmed();
+        if (!newKey.isEmpty()) {
+            break;
+        }
     }
 
-    if (newKey != m_pixKey) {
+    if (newKey != m_pixKey || newPayload != m_pixPayload) {
         m_pixKey = newKey;
+        m_pixPayload = newPayload;
+        m_pixQrSource = QrCode::dataUrl(m_pixPayload.isEmpty() ? m_pixKey : m_pixPayload);
         emit pixKeyChanged();
     }
+}
+
+QString SystemService::pixQrSource() const
+{
+    return m_pixQrSource;
+}
+
+bool SystemService::pixQrIsPayload() const
+{
+    return !m_pixPayload.isEmpty();
 }
 
 void SystemService::readPlasmaVersion()

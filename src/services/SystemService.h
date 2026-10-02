@@ -24,6 +24,9 @@ class SystemService final : public QObject
     Q_PROPERTY(QString logoSource READ logoSource CONSTANT)
     Q_PROPERTY(QString plasmaVersion READ plasmaVersion NOTIFY plasmaVersionChanged)
     Q_PROPERTY(QString pixKey READ pixKey NOTIFY pixKeyChanged)
+    // QR image (data URL) of PixPayload when configured, otherwise of the key.
+    Q_PROPERTY(QString pixQrSource READ pixQrSource NOTIFY pixKeyChanged)
+    Q_PROPERTY(bool pixQrIsPayload READ pixQrIsPayload NOTIFY pixKeyChanged)
     Q_PROPERTY(QString firewallStatus READ firewallStatus NOTIFY diagnosticsChanged)
     Q_PROPERTY(QString driversStatus READ driversStatus NOTIFY diagnosticsChanged)
     Q_PROPERTY(bool driversAvailable READ driversAvailable NOTIFY diagnosticsChanged)
@@ -43,6 +46,8 @@ public:
     QString logoSource() const;
     QString plasmaVersion() const;
     QString pixKey() const;
+    QString pixQrSource() const;
+    bool pixQrIsPayload() const;
     QString firewallStatus() const;
     QString driversStatus() const;
     bool driversAvailable() const;
@@ -111,6 +116,8 @@ private:
     QString m_visualStyle;
     QString m_plasmaVersion;
     QString m_pixKey;
+    QString m_pixPayload;
+    QString m_pixQrSource;
     QString m_firewallStatus;
     QString m_driversStatus;
     QString m_lastMessage;

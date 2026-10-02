@@ -200,7 +200,7 @@ Kirigami.ApplicationWindow {
                 AppsPage { appModel: browserModel; pkgService: packageService; installer: installService; system: systemService; onInstallRequested: (profileId) => root.openInstallDialog(profileId); pageTitle: "Navegadores"; pageDescription: "Escolha seu navegador preferido para navegar na web."; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
                 TutorialsPage { tutorialModel: videoModel; hostWindow: root; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
                 AboutPage { system: systemService; report: systemReport; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; elevatedColor: root.elevatedColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
-                ContributePage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor }
+                ContributePage { system: systemService; dark: root.dark; accent: root.accent; pageColor: root.pageColor; surfaceColor: root.surfaceColor; borderColor: root.borderColor; textColor: root.textColor; mutedColor: root.mutedColor; successColor: root.successColor }
             }
         }
     }

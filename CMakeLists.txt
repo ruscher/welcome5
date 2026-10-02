@@ -27,6 +27,9 @@ find_package(Qt6 6.5 QUIET COMPONENTS Test)
 # KConfig reads Plasma settings through the same cascade Plasma uses
 # (~/.config/kdedefaults holds the values written by global themes).
 find_package(KF6Config 6.0 REQUIRED)
+# QR codes for Contribuir are generated locally.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(QRENCODE REQUIRED IMPORTED_TARGET libqrencode)
 find_package(KF6Kirigami QUIET CONFIG)
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -53,6 +56,8 @@ add_library(mainuan-core STATIC
     src/services/LayoutService.h
     src/services/SystemReportService.cpp
     src/services/SystemReportService.h
+    src/services/QrCode.cpp
+    src/services/QrCode.h
     src/services/StartupPreference.cpp
     src/services/StartupPreference.h
     src/models/ApplicationModel.cpp
@@ -77,6 +82,7 @@ target_link_libraries(mainuan-core PUBLIC
     Qt6::DBus
     Qt6::Network
     KF6::ConfigCore
+    PkgConfig::QRENCODE
 )
 
 target_compile_options(mainuan-core PRIVATE
@@ -102,6 +108,7 @@ qt_add_qml_module(mainuan-welcome
         qml/components/PageContainer.qml
         qml/components/LayoutPreview.qml
         qml/components/InfoTile.qml
+        qml/components/ActionCard.qml
         qml/components/ReportDialog.qml
         qml/components/SegmentedChoice.qml
         qml/components/MessageBanner.qml
@@ -196,6 +203,11 @@ install(FILES
 install(FILES
     rootfs/etc/xdg/autostart/org.mainuan.Welcome.desktop
     DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart
+)
+
+install(FILES
+    rootfs/etc/mainuan/welcome.conf
+    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/mainuan
 )
 
 install(FILES

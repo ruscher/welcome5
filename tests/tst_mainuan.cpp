@@ -5,6 +5,7 @@
 #include "services/InstallService.h"
 #include "services/LayoutService.h"
 #include "services/PackageService.h"
+#include "services/QrCode.h"
 #include "services/StartupPreference.h"
 #include "services/SystemReportService.h"
 #include "services/SystemService.h"
@@ -149,6 +150,7 @@ private slots:
     void disablesAptProfilesOnNonDebianSystems();
     void rejectsUnknownProfiles();
 
+    void rendersQrCodesLocally();
     void parsesSystemReportSources();
     void collectsSystemReportWithoutSecrets();
 
@@ -972,6 +974,19 @@ void MainuanTest::rejectsUnknownProfiles()
     QVERIFY(!installer.registerApplication(QStringLiteral("com.brave.Browser"), QStringLiteral("Brave"), {}, {}));
     QVERIFY(!installer.busy());
     QVERIFY(!installer.launch(QStringLiteral("unknown")));
+}
+
+void MainuanTest::rendersQrCodesLocally()
+{
+    const QImage image = QrCode::render(QStringLiteral("mestresemlinux@gmail.com"), 4, 2);
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.width(), image.height());
+    QCOMPARE(image.width() % 4, 0);
+    QCOMPARE(image.pixelColor(0, 0), QColor(Qt::white));              // quiet zone
+    QCOMPARE(image.pixelColor(2 * 4, 2 * 4), QColor(Qt::black));      // finder pattern corner
+    QVERIFY(QrCode::render(QString()).isNull());
+    QVERIFY(QrCode::dataUrl(QStringLiteral("x")).startsWith(QStringLiteral("data:image/png;base64,")));
+    QVERIFY(QrCode::dataUrl(QString()).isEmpty());
 }
 
 void MainuanTest::parsesSystemReportSources()
