@@ -53,6 +53,8 @@ add_library(mainuan-core STATIC
     src/services/SingleInstance.cpp
     src/services/SingleInstance.h
     src/services/LayoutService.cpp
+    src/services/PlasmaInfo.cpp
+    src/services/PlasmaInfo.h
     src/services/LayoutService.h
     src/services/SystemReportService.cpp
     src/services/SystemReportService.h

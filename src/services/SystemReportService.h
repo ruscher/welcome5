@@ -9,9 +9,9 @@
 #include <QVariantMap>
 
 // Collects the information shown in Sobre and in "Relatório da máquina".
-// Files under /proc, /sys and /etc are read directly; lspci, lsblk, glxinfo,
-// plasmashell and dpkg-query run asynchronously with a timeout and are
-// optional. Nothing sensitive is collected: no addresses, serial numbers,
+// Files under /proc, /sys and /etc are read directly and the Plasma version
+// comes from D-Bus; lspci, lsblk, glxinfo and dpkg-query run asynchronously
+// with a timeout and are optional. Nothing sensitive is collected: no addresses, serial numbers,
 // user names or network names, and MAC addresses are masked.
 class SystemReportService final : public QObject
 {

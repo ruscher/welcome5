@@ -1,6 +1,7 @@
 #include "SystemService.h"
 
 #include "AccentProfile.h"
+#include "PlasmaInfo.h"
 #include "QrCode.h"
 #include "VisualStyle.h"
 
@@ -325,29 +326,14 @@ bool SystemService::pixQrIsPayload() const
 
 void SystemService::readPlasmaVersion()
 {
-    const QString executable = QStandardPaths::findExecutable(QStringLiteral("plasmashell"));
-    if (executable.isEmpty()) {
-        if (!m_plasmaVersion.isEmpty()) {
-            m_plasmaVersion.clear();
+    PlasmaInfo::queryVersion(this, [this](const QString &version) {
+        // Same text as `plasmashell --version`, which the pages expect.
+        const QString text = version.isEmpty() ? QString() : QStringLiteral("plasmashell ") + version;
+        if (text != m_plasmaVersion) {
+            m_plasmaVersion = text;
             emit plasmaVersionChanged();
         }
-        return;
-    }
-
-    QProcess *process = new QProcess(this);
-    connect(process, &QProcess::finished, this, [this, process](int exitCode, QProcess::ExitStatus) {
-        const QString output = QString::fromLocal8Bit(process->readAllStandardOutput()).trimmed();
-        const QString version = exitCode == 0 ? output : QString();
-        if (version != m_plasmaVersion) {
-            m_plasmaVersion = version;
-            emit plasmaVersionChanged();
-        }
-        process->deleteLater();
     });
-    connect(process, &QProcess::errorOccurred, this, [process](QProcess::ProcessError) {
-        process->deleteLater();
-    });
-    process->start(executable, {QStringLiteral("--version")});
 }
 
 void SystemService::refreshDiagnostics()
