@@ -32,6 +32,14 @@ Runtime: Qt 6, Qt Quick Controls 2 e Dialogs, Kirigami 6 disponível no sistema 
 
 ## Build e execução
 
+No Mainuan/Ubuntu, instale primeiro as dependências de build (compilador, CMake, Qt 6, Kirigami, KConfig, libqrencode), lidas do `debian/control`:
+
+```bash
+sudo apt-get build-dep ./
+```
+
+Depois, na pasta do código:
+
 ```bash
 cmake -S . -B build
 cmake --build build -j"$(nproc)"
@@ -53,7 +61,7 @@ O pacote instala o binário em `bin/`, o helper em `libexec/mainuan-welcome/`, a
 
 ```bash
 sudo apt-get install devscripts
-sudo apt-get build-dep ./
+sudo apt-get build-dep ./   # se ainda não instalou as dependências
 dpkg-buildpackage -us -uc -b
 sudo apt-get install ../mainuan-welcome_2.2.0_amd64.deb
 ```
