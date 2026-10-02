@@ -95,8 +95,13 @@ private:
     QString findTool(const QString &name) const;
     void runTool(const QString &program, const QStringList &arguments,
                  std::function<void(bool ok, const QString &errorOutput)> done);
-    void applyStyleProfile(const VisualStyleProfile &profile, bool dark, bool withWallpaper,
-                           const QString &successMessage);
+    void applyStyleProfile(const VisualStyleProfile &profile, bool dark, const QString &successMessage);
+    // `replacedWallpaper` is the image the package replaced, empty if it kept it.
+    void finishStyleProfile(const VisualStyleProfile &profile, bool dark, const QString &successMessage,
+                            const QString &replacedWallpaper);
+    // Image of the first desktop's wallpaper (file URL), empty when unknown.
+    void readWallpaper(std::function<void(const QString &image)> done);
+    void applyAccentWallpaper(const QString &accent, const QString &colorMessage);
     void runStyleFollowUps(QList<Command> steps, QStringList failures,
                            std::function<void(const QStringList &failures)> done);
 

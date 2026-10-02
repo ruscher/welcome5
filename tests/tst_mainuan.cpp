@@ -1,6 +1,7 @@
 #include "models/ApplicationModel.h"
 #include "models/VideoModel.h"
 #include "services/InstallProgressParser.h"
+#include "services/AccentProfile.h"
 #include "services/InstallService.h"
 #include "services/PackageService.h"
 #include "services/StartupPreference.h"
@@ -190,16 +191,26 @@ void MainuanTest::mapsVisualStylesToMainuanThemes()
     QCOMPARE(dream->name, QStringLiteral("Dream"));
     QCOMPARE(dream->package(false), QStringLiteral("Dream-Light-Color-Global-6"));
     QCOMPARE(dream->package(true), QStringLiteral("Dream-Dark-Color-Global-6"));
-    QCOMPARE(dream->wallpaper, QStringLiteral("01ciano.png"));
     QCOMPARE(tahoe->name, QStringLiteral("Tahoe"));
     QCOMPARE(tahoe->package(false), QStringLiteral("com.github.vinceliuice.MacTahoe-Light"));
     QCOMPARE(tahoe->package(true), QStringLiteral("com.github.vinceliuice.MacTahoe-Dark"));
-    QCOMPARE(tahoe->wallpaper, QStringLiteral("01ciano.png"));
     QCOMPARE(breeze->name, QStringLiteral("Breeze"));
     QCOMPARE(breeze->package(false), QStringLiteral("org.kde.breeze.desktop"));
     QCOMPARE(breeze->package(true), QStringLiteral("org.kde.breezedark.desktop"));
-    QCOMPARE(breeze->wallpaper, QStringLiteral("02cinza.png"));
     QCOMPARE(VisualStyles::profiles().size(), 3);
+
+    // Each accent color carries the Mainuan wallpaper of the same color.
+    const QList<QPair<QString, QString>> wallpapers = {
+        {QStringLiteral("#d08040"), QStringLiteral("05marrom.png")}, {QStringLiteral("#e8177d"), QStringLiteral("03magenta.png")},
+        {QStringLiteral("#3daee9"), QStringLiteral("01ciano.png")},  {QStringLiteral("#3dd425"), QStringLiteral("06lima.png")},
+        {QStringLiteral("#aab6b9"), QStringLiteral("02cinza.png")},  {QStringLiteral("#a588cb"), QStringLiteral("04purpura.png")}};
+    QCOMPARE(AccentProfiles::profiles().size(), wallpapers.size());
+    for (const auto &[color, wallpaper] : wallpapers) {
+        QVERIFY(AccentProfiles::find(color));
+        QCOMPARE(AccentProfiles::find(color)->wallpaper, wallpaper);
+    }
+    QCOMPARE(AccentProfiles::find(QStringLiteral("#E8177D"))->name, QStringLiteral("Rosa"));
+    QVERIFY(!AccentProfiles::find(QStringLiteral("#123456")));
 
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("blur")));
     QVERIFY(SystemService::isAllowedVisualStyle(QStringLiteral("glass")));
@@ -243,8 +254,9 @@ public:
                 touch(data + QStringLiteral("/plasma/look-and-feel/") + package + QStringLiteral("/metadata.json"));
             }
         }
-        touch(data + QStringLiteral("/wallpapers/01ciano.png"));
-        touch(data + QStringLiteral("/wallpapers/02cinza.png"));
+        for (const AccentProfile &accent : AccentProfiles::profiles()) {
+            touch(data + QStringLiteral("/wallpapers/") + accent.wallpaper);
+        }
         for (const QString &icons : {QStringLiteral("breeze"), QStringLiteral("breeze-dark"), QStringLiteral("kora-cyan")}) {
             touch(data + QStringLiteral("/icons/") + icons + QStringLiteral("/index.theme"));
         }
@@ -317,9 +329,8 @@ void MainuanTest::appliesVisualStyleProfiles()
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
     QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Dream aplicado."));
-    QCOMPARE(sandbox.takeCalls(), (QStringList{
-        QStringLiteral("lookandfeel Dream-Light-Color-Global-6"),
-        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+    // The style does not touch the wallpaper; it follows the accent color.
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("lookandfeel Dream-Light-Color-Global-6")}));
 
     // Tahoe names icon and cursor themes Mainuan does not ship: Breeze fallbacks.
     service.setVisualStyle(QStringLiteral("glass"));
@@ -329,14 +340,13 @@ void MainuanTest::appliesVisualStyleProfiles()
     QCOMPARE(sandbox.takeCalls(), (QStringList{
         QStringLiteral("lookandfeel com.github.vinceliuice.MacTahoe-Light"),
         QStringLiteral("plasma-changeicons breeze"),
-        QStringLiteral("plasma-apply-cursortheme breeze_cursors"),
-        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/01ciano.png")}));
+        QStringLiteral("plasma-apply-cursortheme breeze_cursors")}));
 
     service.setVisualStyle(QStringLiteral("solid"));
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("solid"));
     QCOMPARE(service.lastMessage(), QStringLiteral("Estilo Breeze aplicado."));
-    QVERIFY(sandbox.takeCalls().constLast().endsWith(QStringLiteral("/wallpapers/02cinza.png")));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("lookandfeel org.kde.breeze.desktop")}));
 
     // Repeated switching keeps working and the state is read back by a new instance.
     for (const QString &style : {QStringLiteral("blur"), QStringLiteral("solid"), QStringLiteral("glass")}) {
@@ -376,13 +386,9 @@ void MainuanTest::reportsVisualStyleFailures()
     qunsetenv("MOCK_LNF_NOOP");
     sandbox.takeCalls();
 
-    // A secondary step fails: the style is applied and the gap is reported.
-    qputenv("MOCK_WALLPAPER_FAIL", "1");
     service.setVisualStyle(QStringLiteral("blur"));
     QVERIFY(waitIdle(service));
     QCOMPARE(service.visualStyle(), QStringLiteral("blur"));
-    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Estilo Dream aplicado. Não foi possível ajustar: papel de parede."));
-    qunsetenv("MOCK_WALLPAPER_FAIL");
 
     // Missing package.
     QVERIFY(QFile::remove(sandbox.data() + QStringLiteral("/plasma/look-and-feel/org.kde.breeze.desktop/metadata.json")));
@@ -435,13 +441,40 @@ void MainuanTest::recordsTheChosenAccentColor()
 
     service.setAccent(QStringLiteral("#E8177D"));
     QVERIFY(waitIdle(service));
-    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("plasma-apply-colorscheme --accent-color #e8177d")}));
-    QCOMPARE(service.lastMessage(), QStringLiteral("Cor de destaque aplicada."));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{
+        QStringLiteral("plasma-apply-colorscheme --accent-color #e8177d"),
+        QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/03magenta.png")}));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Cor Rosa e papel de parede aplicados."));
     QCOMPARE(service.accentColor(), QStringLiteral("#e8177d"));
     // Stored where System Settings stores it, so Plasma keeps it across global themes.
     QFile globals(sandbox.config() + QStringLiteral("/kdeglobals"));
     QVERIFY(globals.open(QIODevice::ReadOnly));
     QVERIFY(globals.readAll().contains("AccentColor=232,23,125"));
+
+    // Each color applies its own wallpaper.
+    for (const AccentProfile &accent : AccentProfiles::profiles()) {
+        service.setAccent(accent.color);
+        QVERIFY(waitIdle(service));
+        QCOMPARE(sandbox.takeCalls().constLast(),
+                 QStringLiteral("plasma-apply-wallpaperimage ") + sandbox.data() + QStringLiteral("/wallpapers/") + accent.wallpaper);
+        QCOMPARE(service.accentColor(), accent.color);
+    }
+
+    // Missing wallpaper: the color is applied, the wallpaper is reported, not claimed.
+    QVERIFY(QFile::remove(sandbox.data() + QStringLiteral("/wallpapers/06lima.png")));
+    service.setAccent(QStringLiteral("#3dd425"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(sandbox.takeCalls(), (QStringList{QStringLiteral("plasma-apply-colorscheme --accent-color #3dd425")}));
+    QCOMPARE(service.accentColor(), QStringLiteral("#3dd425"));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Cor Verde aplicada, mas o papel de parede 06lima.png não foi encontrado."));
+
+    // The wallpaper tool fails.
+    qputenv("MOCK_WALLPAPER_FAIL", "1");
+    service.setAccent(QStringLiteral("#3daee9"));
+    QVERIFY(waitIdle(service));
+    QCOMPARE(service.lastMessage(), QStringLiteral("Erro: Cor Azul aplicada, mas não foi possível trocar o papel de parede."));
+    qunsetenv("MOCK_WALLPAPER_FAIL");
+    sandbox.takeCalls();
 
     service.setAccent(QStringLiteral("red; rm -rf ~"));
     QVERIFY(!service.busy());

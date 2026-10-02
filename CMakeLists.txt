@@ -37,6 +37,8 @@ add_library(mainuan-core STATIC
     src/services/SystemService.cpp
     src/services/SystemService.h
     src/services/VisualStyle.cpp
+    src/services/AccentProfile.cpp
+    src/services/AccentProfile.h
     src/services/VisualStyle.h
     src/services/PackageService.cpp
     src/services/PackageService.h
