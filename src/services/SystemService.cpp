@@ -219,16 +219,6 @@ bool SystemService::isValidAccent(const QString &value)
         && (value.trimmed().size() == 7 || value.trimmed().size() == 9);
 }
 
-bool SystemService::isAllowedLayout(const QString &value)
-{
-    static const QStringList allowed = {
-        QStringLiteral("plasma-default"), QStringLiteral("panel-top"),
-        QStringLiteral("floating"),       QStringLiteral("minimal"),
-        QStringLiteral("latte-unity"),    QStringLiteral("tiling")
-    };
-    return allowed.contains(value);
-}
-
 bool SystemService::isAllowedVisualStyle(const QString &value)
 {
     return VisualStyles::find(value) != nullptr;
@@ -719,21 +709,6 @@ void SystemService::performAction(const QString &action)
     }
 
     setMessage(QStringLiteral("Ação desconhecida."), true);
-}
-
-void SystemService::applyLayout(const QString &layoutId)
-{
-    if (!isAllowedLayout(layoutId)) {
-        setMessage(QStringLiteral("Layout inválido."), true);
-        return;
-    }
-
-    if (layoutId == QStringLiteral("plasma-default")) {
-        setMessage(QStringLiteral("O layout padrão do Plasma não requer alterações."));
-        return;
-    }
-
-    setMessage(QStringLiteral("Este layout depende de componentes antigos e não é aplicado no Plasma 6.6."), true);
 }
 
 bool SystemService::openUrl(const QString &url)

@@ -50,7 +50,6 @@ public:
     bool busy() const;
 
     static bool isValidAccent(const QString &value);
-    static bool isAllowedLayout(const QString &value);
     static bool isAllowedVisualStyle(const QString &value);
 
     // Directories searched for the Plasma tools instead of PATH (tests only).
@@ -61,7 +60,6 @@ public:
     Q_INVOKABLE void setAccent(const QString &accent);
     Q_INVOKABLE void setVisualStyle(const QString &style);
     Q_INVOKABLE void performAction(const QString &action);
-    Q_INVOKABLE void applyLayout(const QString &layoutId);
     Q_INVOKABLE bool openUrl(const QString &url);
     Q_INVOKABLE bool copyText(const QString &text);
 

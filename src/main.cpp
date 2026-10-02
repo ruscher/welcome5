@@ -2,6 +2,7 @@
 #include "models/LayoutModel.h"
 #include "models/VideoModel.h"
 #include "services/InstallService.h"
+#include "services/LayoutService.h"
 #include "services/PackageService.h"
 #include "services/SingleInstance.h"
 #include "services/StartupPreference.h"
@@ -96,6 +97,8 @@ int main(int argc, char *argv[])
     browserModel.setInstallService(&installService);
 
     StartupPreference startupPreference;
+    LayoutService layoutService;
+    layoutService.refresh();
     VideoModel videoModel;
     LayoutModel layoutModel;
 
@@ -104,6 +107,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("packageService"), &packageService);
     engine.rootContext()->setContextProperty(QStringLiteral("installService"), &installService);
     engine.rootContext()->setContextProperty(QStringLiteral("startupPreference"), &startupPreference);
+    engine.rootContext()->setContextProperty(QStringLiteral("layoutService"), &layoutService);
     engine.rootContext()->setContextProperty(QStringLiteral("officeModel"), &officeModel);
     engine.rootContext()->setContextProperty(QStringLiteral("browserModel"), &browserModel);
     engine.rootContext()->setContextProperty(QStringLiteral("videoModel"), &videoModel);

@@ -7,6 +7,7 @@ Kirigami.Page {
     id: page
     property var system
     property var layouts
+    property var layoutManager
     property bool dark: false
     property color accent: "#3daee9"
     property color pageColor: "#f3f5f9"
@@ -198,17 +199,27 @@ Kirigami.Page {
         }
         Controls.Label {
             Layout.fillWidth: true
-            text: "A função antiga foi auditada: apenas o perfil nativo é reconhecido como seguro no Plasma 6.6."
+            text: page.layoutManager.available
+                  ? "Escolha como os painéis ficam na tela. Antes de cada troca o Welcome guarda uma cópia do layout atual."
+                  : "Os layouts só podem ser aplicados dentro de uma sessão do KDE Plasma."
             color: page.mutedColor
             wrapMode: Text.WordWrap
+        }
+
+        MessageBanner {
+            Layout.fillWidth: true
+            text: page.layoutManager.message
+            error: page.layoutManager.messageIsError
+            dark: page.dark
+            accent: page.accent
+            textColor: page.textColor
         }
 
         GridLayout {
             id: layoutGrid
             Layout.fillWidth: true
-            Layout.bottomMargin: 24
             readonly property int cardMinimum: 240
-            columns: Math.max(1, Math.min(4, Math.floor((width + columnSpacing) / (cardMinimum + columnSpacing))))
+            columns: Math.max(1, Math.min(3, Math.floor((width + columnSpacing) / (cardMinimum + columnSpacing))))
             columnSpacing: 14
             rowSpacing: 14
 
@@ -219,16 +230,17 @@ Kirigami.Page {
                     required property string layoutId
                     required property string name
                     required property string description
-                    required property string status
-                    required property bool available
+                    readonly property bool active: page.layoutManager.activeLayout === layoutId
 
                     Layout.fillWidth: true
                     Layout.preferredWidth: layoutGrid.cardMinimum
-                    implicitHeight: cardColumn.implicitHeight + 32
+                    implicitHeight: cardColumn.implicitHeight + 28
                     radius: 14
                     color: page.surfaceColor
-                    border.color: available ? page.accent : (cardHover.hovered ? Qt.rgba(page.accent.r, page.accent.g, page.accent.b, 0.45) : page.borderColor)
-                    opacity: available ? 1 : 0.72
+                    border.width: active ? 2 : 1
+                    border.color: active ? page.accent
+                                         : (cardHover.hovered ? Qt.rgba(page.accent.r, page.accent.g, page.accent.b, 0.45) : page.borderColor)
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
                     HoverHandler { id: cardHover }
 
                     ColumnLayout {
@@ -236,55 +248,106 @@ Kirigami.Page {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.margins: 16
-                        spacing: 10
-                        Rectangle {
+                        anchors.margins: 14
+                        spacing: 8
+
+                        LayoutPreview {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 86
-                            radius: 10
-                            color: page.elevatedColor
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                Repeater {
-                                    model: layoutCard.layoutId === "panel-top" ? 4 : 3
-                                    delegate: Rectangle {
-                                        required property int index
-                                        width: 32
-                                        height: 42
-                                        radius: 4
-                                        color: Qt.rgba(page.accent.r, page.accent.g, page.accent.b, 0.35 + index * 0.12)
-                                    }
-                                }
+                            layoutId: layoutCard.layoutId
+                            accent: page.accent
+                            panelColor: page.dark ? "#d8dde6" : "#ffffff"
+                            borderColor: page.borderColor
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: layoutCard.name
+                                color: page.textColor
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+                            Kirigami.Icon {
+                                visible: layoutCard.active
+                                Layout.preferredWidth: 16
+                                Layout.preferredHeight: 16
+                                source: "checkmark"
+                                color: page.successColor
+                                Accessible.ignored: true
+                            }
+                            Controls.Label {
+                                visible: layoutCard.active
+                                text: "Em uso"
+                                color: page.successColor
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
                             }
                         }
-                        Controls.Label { Layout.fillWidth: true; text: layoutCard.name; color: page.textColor; font.weight: Font.DemiBold }
                         Controls.Label {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: Math.max(implicitHeight, 34)
+                            Layout.preferredHeight: Math.max(implicitHeight, 2 * fontMetrics.height)
                             text: layoutCard.description
                             color: page.mutedColor
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
+                            FontMetrics { id: fontMetrics; font.pixelSize: 12 }
                         }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Controls.Label {
-                                Layout.fillWidth: true
-                                text: layoutCard.status
-                                color: layoutCard.available ? page.successColor : page.mutedColor
-                                font.pixelSize: 11
-                            }
-                            Controls.Button {
-                                text: "Aplicar"
-                                enabled: layoutCard.available && !page.system.busy
-                                onClicked: page.system.applyLayout(layoutCard.layoutId)
-                                Accessible.name: "Aplicar layout " + layoutCard.name
-                            }
+                        Controls.Button {
+                            Layout.alignment: Qt.AlignRight
+                            text: layoutCard.active ? "Aplicado" : "Aplicar"
+                            icon.name: layoutCard.active ? "checkmark" : "dialog-ok-apply"
+                            enabled: page.layoutManager.available && !page.layoutManager.busy && !layoutCard.active
+                            onClicked: page.layoutManager.apply(layoutCard.layoutId)
+                            Accessible.name: (layoutCard.active ? "Layout em uso: " : "Aplicar layout ") + layoutCard.name
+                            Accessible.description: layoutCard.description
                         }
                     }
                 }
             }
         }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: page.layoutManager.hasBackup
+            spacing: 10
+            Controls.Label {
+                Layout.fillWidth: true
+                text: "Volta ao layout que estava em uso antes da última troca. O Plasma é reiniciado por alguns segundos."
+                color: page.mutedColor
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+            Controls.Button {
+                text: "Restaurar layout anterior"
+                icon.name: "edit-undo"
+                enabled: !page.layoutManager.busy
+                onClicked: restoreDialog.open()
+            }
+        }
+    }
+
+    Kirigami.PromptDialog {
+        id: restoreDialog
+        parent: page.Controls.Overlay.overlay
+        preferredWidth: Kirigami.Units.gridUnit * 28
+        title: "Restaurar layout anterior?"
+        subtitle: "Os painéis voltam a ser como estavam antes da última troca de layout. O Plasma será reiniciado por alguns segundos."
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: "Restaurar"
+                icon.name: "edit-undo"
+                onTriggered: {
+                    restoreDialog.close();
+                    page.layoutManager.restoreBackup();
+                }
+            },
+            Kirigami.Action {
+                text: "Cancelar"
+                icon.name: "dialog-cancel"
+                onTriggered: restoreDialog.close()
+            }
+        ]
     }
 }

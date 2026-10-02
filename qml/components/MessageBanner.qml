@@ -9,12 +9,15 @@ Rectangle {
     property bool dark: false
     property color accent: "#3daee9"
     property color textColor: "#202532"
+    property bool error: false
+    property color errorColor: "#c0392b"
+    readonly property color tone: error ? errorColor : accent
 
     visible: text.length > 0
     implicitHeight: label.implicitHeight + 26
     radius: 10
-    color: Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.15 : 0.10)
-    border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.35)
+    color: Qt.rgba(tone.r, tone.g, tone.b, dark ? 0.15 : 0.10)
+    border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.35)
 
     Controls.Label {
         id: label

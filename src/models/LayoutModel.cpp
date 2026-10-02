@@ -1,24 +1,20 @@
 #include "LayoutModel.h"
 
+#include "services/LayoutService.h"
+
 LayoutModel::LayoutModel(QObject *parent)
     : QAbstractListModel(parent)
 {
-    // Plasma 6 does not provide a stable public API for importing arbitrary panel
-    // layouts. Latte Dock and Bismuth are not Plasma 6.6 baseline dependencies.
-    m_entries = {
-        {QStringLiteral("plasma-default"), QStringLiteral("Plasma padrão"),
-         QStringLiteral("Layout nativo do Plasma, sem dependências externas."), QStringLiteral("Disponível"), true},
-        {QStringLiteral("panel-top"), QStringLiteral("Painel superior"),
-         QStringLiteral("Requer um perfil específico do Plasma; não disponível com segurança."), QStringLiteral("Incompatível"), false},
-        {QStringLiteral("floating"), QStringLiteral("Flutuante"),
-         QStringLiteral("Dependia de configurações antigas de dock."), QStringLiteral("Incompatível"), false},
-        {QStringLiteral("minimal"), QStringLiteral("Minimalista"),
-         QStringLiteral("Não há API pública do Plasma 6.6 para aplicar este perfil."), QStringLiteral("Incompatível"), false},
-        {QStringLiteral("latte-unity"), QStringLiteral("Unity-like"),
-         QStringLiteral("Latte Dock não é dependência suportada no Plasma 6.6."), QStringLiteral("Legado"), false},
-        {QStringLiteral("tiling"), QStringLiteral("Tiling"),
-         QStringLiteral("Bismuth não é dependência suportada no Plasma 6.6."), QStringLiteral("Legado"), false}
-    };
+    const QHash<QString, QString> descriptions = {
+        {QStringLiteral("plasma-default"), QStringLiteral("O visual do Mainuan: ilhas flutuantes na base com menu, tarefas, bandeja e relógio.")},
+        {QStringLiteral("panel-top"), QStringLiteral("Barra completa no topo com menu, áreas de trabalho, janelas abertas e relógio.")},
+        {QStringLiteral("floating"), QStringLiteral("Um dock central que flutua acima da borda da tela, com tudo à mão.")},
+        {QStringLiteral("minimal"), QStringLiteral("Uma barra fina na base que sai do caminho das janelas.")},
+        {QStringLiteral("unity"), QStringLiteral("Barra de menus global no topo e um lançador vertical à esquerda.")},
+        {QStringLiteral("tiling"), QStringLiteral("Barra compacta no topo e blocos do KWin para organizar as janelas lado a lado.")}};
+    for (const QString &id : LayoutService::layoutIds()) {
+        m_entries.append({id, LayoutService::displayName(id), descriptions.value(id)});
+    }
 }
 
 int LayoutModel::rowCount(const QModelIndex &parent) const
@@ -36,14 +32,11 @@ QVariant LayoutModel::data(const QModelIndex &index, int role) const
     case LayoutIdRole: return entry.id;
     case NameRole: return entry.name;
     case DescriptionRole: return entry.description;
-    case StatusRole: return entry.status;
-    case AvailableRole: return entry.available;
     default: return {};
     }
 }
 
 QHash<int, QByteArray> LayoutModel::roleNames() const
 {
-    return {{LayoutIdRole, "layoutId"}, {NameRole, "name"}, {DescriptionRole, "description"},
-            {StatusRole, "status"}, {AvailableRole, "available"}};
+    return {{LayoutIdRole, "layoutId"}, {NameRole, "name"}, {DescriptionRole, "description"}};
 }

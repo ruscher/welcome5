@@ -3,6 +3,7 @@
 #include "services/InstallProgressParser.h"
 #include "services/AccentProfile.h"
 #include "services/InstallService.h"
+#include "services/LayoutService.h"
 #include "services/PackageService.h"
 #include "services/StartupPreference.h"
 #include "services/SystemService.h"
@@ -119,6 +120,8 @@ private slots:
     void acceptsOnlyHexAccentColors();
     void rejectsUnexpectedPackageIds();
     void acceptsOnlyKnownLayouts();
+    void buildsLayoutScripts();
+    void backsUpAndRestoresPanelConfiguration();
     void mapsVisualStylesToMainuanThemes();
     void detectsVisualStyleFromPlasmaConfig();
     void appliesVisualStyleProfiles();
@@ -177,9 +180,87 @@ void MainuanTest::rejectsUnexpectedPackageIds()
 
 void MainuanTest::acceptsOnlyKnownLayouts()
 {
-    QVERIFY(SystemService::isAllowedLayout(QStringLiteral("plasma-default")));
-    QVERIFY(SystemService::isAllowedLayout(QStringLiteral("tiling")));
-    QVERIFY(!SystemService::isAllowedLayout(QStringLiteral("../../tmp")));
+    QCOMPARE(LayoutService::layoutIds().size(), 6);
+    for (const QString &id : LayoutService::layoutIds()) {
+        QVERIFY(LayoutService::isAllowedLayout(id));
+        QVERIFY(!LayoutService::displayName(id).isEmpty());
+    }
+    QVERIFY(!LayoutService::isAllowedLayout(QStringLiteral("../../tmp")));
+    QVERIFY(!LayoutService::isAllowedLayout(QStringLiteral("unity\");panels().forEach(function(p){p.remove()});//")));
+}
+
+void MainuanTest::buildsLayoutScripts()
+{
+    const QString script = LayoutService::buildScript(QStringLiteral("unity"),
+        {QStringLiteral("Chaac.Complete.Weather"), QStringLiteral("x\"];panels().forEach(function(p){p.remove()});//"),
+         QStringLiteral("../escape"), QStringLiteral("com.mike.desktop")});
+    QVERIFY(script.startsWith(QStringLiteral("var installedWidgets = [\"Chaac.Complete.Weather\",\"com.mike.desktop\"];\n")));
+    QVERIFY(script.contains(QStringLiteral("function applyMainuanLayout(id)")));
+    QVERIFY(script.trimmed().endsWith(QStringLiteral("applyMainuanLayout(\"unity\");")));
+    QVERIFY(!script.contains(QStringLiteral("../escape")));
+    QVERIFY(LayoutService::buildScript(QStringLiteral("evil"), {}).isEmpty());
+
+    using Description = LayoutService::Description;
+    Description description = LayoutService::parseDescription(QStringLiteral("floating|1|1\n"));
+    QVERIFY(description.valid());
+    QCOMPARE(description.layout, QStringLiteral("floating"));
+    QCOMPARE(description.panels, 1);
+    QCOMPARE(description.launchers, 1);
+    description = LayoutService::parseDescription(QStringLiteral("|5|1"));
+    QVERIFY(description.valid());
+    QVERIFY(description.layout.isEmpty()); // custom layout, not one of the six
+    QVERIFY(LayoutService::parseDescription(QStringLiteral("hacked|5|1")).layout.isEmpty());
+    QVERIFY(!LayoutService::parseDescription(QStringLiteral("Error: TypeError")).valid());
+    QVERIFY(!LayoutService::parseDescription(QStringLiteral("unity|x|1")).valid());
+}
+
+void MainuanTest::backsUpAndRestoresPanelConfiguration()
+{
+    QTemporaryDir config;
+    QTemporaryDir backups;
+    const auto write = [&config](const QString &name, const QByteArray &contents) {
+        QFile file(config.filePath(name));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(contents);
+    };
+    const auto read = [&config](const QString &name) {
+        QFile file(config.filePath(name));
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    };
+    LayoutService service(nullptr, config.path(), backups.path());
+    QVERIFY(!service.hasBackup());
+    QVERIFY(service.createBackup().isEmpty()); // nothing to back up yet
+    QVERIFY(!service.hasBackup());
+
+    write(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), "[Containments][1]\nplugin=org.kde.panel\n");
+    write(QStringLiteral("plasmashellrc"), "[PlasmaViews][Panel 1]\nfloating=1\n");
+    const QString first = service.createBackup();
+    QVERIFY(!first.isEmpty());
+    QVERIFY(first.startsWith(backups.path()));
+    QVERIFY(service.hasBackup());
+
+    write(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), "broken");
+    write(QStringLiteral("plasmashellrc"), "broken");
+    QVERIFY(service.restoreFiles(first));
+    QCOMPARE(read(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc")), QByteArray("[Containments][1]\nplugin=org.kde.panel\n"));
+    QCOMPARE(read(QStringLiteral("plasmashellrc")), QByteArray("[PlasmaViews][Panel 1]\nfloating=1\n"));
+
+    // Only the five newest backups are kept.
+    for (int i = 0; i < 7; ++i) {
+        QTest::qWait(2);
+        QVERIFY(!service.createBackup().isEmpty());
+    }
+    QCOMPARE(service.backups().size(), 5);
+    QVERIFY(!service.backups().contains(first));
+
+    // Outside Plasma nothing is applied and no backup is taken.
+    const int before = static_cast<int>(service.backups().size());
+    service.apply(QStringLiteral("floating"));
+    QVERIFY(!service.busy());
+    QVERIFY(service.messageIsError());
+    QCOMPARE(service.backups().size(), before);
+    service.apply(QStringLiteral("rm -rf"));
+    QCOMPARE(service.message(), QStringLiteral("Layout inválido."));
 }
 
 void MainuanTest::mapsVisualStylesToMainuanThemes()

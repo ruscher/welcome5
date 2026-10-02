@@ -48,6 +48,8 @@ add_library(mainuan-core STATIC
     src/services/InstallProgressParser.h
     src/services/SingleInstance.cpp
     src/services/SingleInstance.h
+    src/services/LayoutService.cpp
+    src/services/LayoutService.h
     src/services/StartupPreference.cpp
     src/services/StartupPreference.h
     src/models/ApplicationModel.cpp
@@ -59,6 +61,12 @@ add_library(mainuan-core STATIC
 )
 
 target_include_directories(mainuan-core PUBLIC src)
+# Plasma and KWin scripts used by LayoutService.
+qt_add_resources(mainuan-core layout_scripts
+    PREFIX "/layouts"
+    BASE src/layouts
+    FILES src/layouts/desktop-layouts.js src/layouts/kwin-tiling.js
+)
 target_compile_definitions(mainuan-core PRIVATE MAINUAN_HELPER_PATH="${MAINUAN_HELPER_PATH}")
 target_link_libraries(mainuan-core PUBLIC
     Qt6::Core
@@ -89,6 +97,7 @@ qt_add_qml_module(mainuan-welcome
         qml/components/SidebarButton.qml
         qml/components/SettingRow.qml
         qml/components/PageContainer.qml
+        qml/components/LayoutPreview.qml
         qml/components/SegmentedChoice.qml
         qml/components/MessageBanner.qml
         qml/components/InstallDialog.qml
